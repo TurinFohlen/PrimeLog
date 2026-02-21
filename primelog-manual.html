@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PrimeLog — 使用手册 v0.1.3</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg:       #0c0c0e;
+    --bg2:      #111116;
+    --bg3:      #18181f;
+    --border:   #2a2a35;
+    --text:     #e8e8f0;
+    --muted:    #6b6b80;
+    --accent:   #7c6af7;
+    --accent2:  #3ecfb2;
+    --accent3:  #f5c842;
+    --danger:   #f06060;
+    --mono:     'JetBrains Mono', monospace;
+    --sans:     'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  /* ── 顶部导航 ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(12,12,14,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 2.5rem;
+    height: 52px;
+  }
+  .nav-brand {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.15em;
+    color: var(--accent); text-transform: uppercase;
+    font-family: var(--mono);
+  }
+  .nav-links { display: flex; gap: 2rem; }
+  .nav-links a {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+    color: var(--muted); text-decoration: none; text-transform: uppercase;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--text); }
+  .version-badge {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    color: var(--accent2); border: 1px solid var(--accent2);
+    padding: 2px 8px; border-radius: 2px; letter-spacing: 0.05em;
+  }
+
+  /* ── 레이아웃 ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    min-height: 100vh;
+    padding-top: 52px;
+  }
+
+  /* ── 사이드바 ── */
+  aside {
+    position: sticky; top: 52px; height: calc(100vh - 52px);
+    overflow-y: auto; border-right: 1px solid var(--border);
+    padding: 2rem 0;
+    background: var(--bg2);
+  }
+  .sidebar-section {
+    padding: 0 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+  .sidebar-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.15em;
+    color: var(--muted); text-transform: uppercase;
+    padding: 1.2rem 1.5rem 0.4rem;
+    display: block;
+  }
+  aside a {
+    display: block; padding: 0.35rem 1.5rem;
+    font-size: 13px; font-weight: 400; color: var(--muted);
+    text-decoration: none; transition: all 0.15s;
+    border-left: 2px solid transparent;
+    font-family: var(--mono);
+  }
+  aside a:hover { color: var(--text); border-left-color: var(--border); }
+  aside a.active { color: var(--accent); border-left-color: var(--accent); }
+
+  /* ── 본문 ── */
+  main {
+    padding: 3.5rem 4rem;
+    max-width: 900px;
+  }
+
+  /* ── 히어로 ── */
+  .hero {
+    margin-bottom: 4rem;
+    padding-bottom: 3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero-eyebrow {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.2em; color: var(--accent2);
+    text-transform: uppercase; margin-bottom: 1rem;
+  }
+  .hero h1 {
+    font-size: 3rem; font-weight: 800; line-height: 1.1;
+    letter-spacing: -0.02em; margin-bottom: 1rem;
+  }
+  .hero h1 span { color: var(--accent); }
+  .hero-sub {
+    font-size: 16px; color: var(--muted); max-width: 520px;
+    line-height: 1.6; margin-bottom: 1.5rem;
+  }
+  .hero-tagline {
+    font-family: var(--mono); font-size: 13px;
+    color: var(--accent3); letter-spacing: 0.05em;
+  }
+
+  /* ── 섹션 ── */
+  section { margin-bottom: 4rem; }
+  section h2 {
+    font-size: 1.4rem; font-weight: 700; letter-spacing: -0.01em;
+    margin-bottom: 1.5rem; padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 0.75rem;
+  }
+  section h2 .section-num {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    color: var(--accent); background: rgba(124,106,247,0.12);
+    padding: 2px 8px; border-radius: 2px;
+  }
+  section h3 {
+    font-size: 1rem; font-weight: 700; color: var(--text);
+    margin: 2rem 0 0.75rem; letter-spacing: 0.01em;
+  }
+  p { color: var(--muted); margin-bottom: 1rem; }
+  p strong { color: var(--text); font-weight: 600; }
+
+  /* ── 커맨드 카드 ── */
+  .cmd-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+  .cmd-header {
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+  .cmd-name {
+    font-family: var(--mono); font-size: 14px; font-weight: 700;
+    color: var(--accent2);
+  }
+  .cmd-desc {
+    font-size: 13px; color: var(--muted);
+  }
+  .cmd-type {
+    margin-left: auto; font-family: var(--mono); font-size: 10px;
+    font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 2px;
+  }
+  .cmd-type.cli  { color: var(--accent3); background: rgba(245,200,66,0.1); }
+  .cmd-type.api  { color: var(--accent);  background: rgba(124,106,247,0.1); }
+
+  .cmd-body { padding: 1.25rem; }
+
+  /* ── 코드 블록 ── */
+  pre {
+    background: #0a0a0c;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 0.75rem 0;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  code { font-family: var(--mono); font-size: 13px; }
+  p code, li code {
+    background: rgba(124,106,247,0.12);
+    color: var(--accent);
+    padding: 1px 6px; border-radius: 3px;
+    font-size: 12px;
+  }
+  .hl-cmd    { color: var(--accent2); }
+  .hl-flag   { color: var(--accent3); }
+  .hl-arg    { color: #a8d8ff; }
+  .hl-str    { color: #b5ead7; }
+  .hl-cmt    { color: var(--muted); font-style: italic; }
+  .hl-kw     { color: var(--accent); }
+  .hl-dec    { color: var(--accent3); }
+
+  /* ── 파라미터 테이블 ── */
+  .param-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 13px; margin: 0.75rem 0;
+  }
+  .param-table th {
+    text-align: left; padding: 0.5rem 0.75rem;
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); border-bottom: 1px solid var(--border);
+  }
+  .param-table td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid rgba(42,42,53,0.5);
+    vertical-align: top;
+  }
+  .param-table tr:last-child td { border-bottom: none; }
+  .param-name { font-family: var(--mono); color: var(--accent2); }
+  .param-req  { color: var(--danger); font-size: 11px; font-weight: 700; }
+  .param-opt  { color: var(--muted);  font-size: 11px; }
+  .param-desc { color: var(--muted); }
+
+  /* ── 알림 박스 ── */
+  .callout {
+    border-left: 3px solid;
+    padding: 0.9rem 1.25rem;
+    border-radius: 0 4px 4px 0;
+    margin: 1rem 0;
+    font-size: 13px;
+  }
+  .callout.info    { border-color: var(--accent);  background: rgba(124,106,247,0.07); color: var(--text); }
+  .callout.tip     { border-color: var(--accent2); background: rgba(62,207,178,0.07); color: var(--text); }
+  .callout.warning { border-color: var(--accent3); background: rgba(245,200,66,0.07); color: var(--text); }
+  .callout strong  { display: block; margin-bottom: 0.3rem; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  /* ── 삼위일체 다이어그램 ── */
+  .triad {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 1rem; margin: 1.5rem 0;
+  }
+  .triad-item {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 6px; padding: 1.25rem;
+    text-align: center;
+  }
+  .triad-icon {
+    font-size: 1.5rem; margin-bottom: 0.5rem;
+  }
+  .triad-name {
+    font-family: var(--mono); font-size: 13px; font-weight: 700;
+    color: var(--accent2); margin-bottom: 0.25rem;
+  }
+  .triad-role {
+    font-size: 12px; color: var(--muted);
+  }
+  .triad-arrow {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; color: var(--border);
+    padding-top: 1.5rem;
+  }
+
+  /* ── 플로우 ── */
+  .flow {
+    display: flex; align-items: flex-start; gap: 0;
+    margin: 1.5rem 0; overflow-x: auto;
+  }
+  .flow-step {
+    flex: 1; min-width: 130px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 6px; padding: 1rem;
+    text-align: center; position: relative;
+  }
+  .flow-step + .flow-step {
+    margin-left: -1px;
+    border-radius: 0 6px 6px 0;
+  }
+  .flow-step:first-child { border-radius: 6px 0 0 6px; }
+  .flow-step-num {
+    font-family: var(--mono); font-size: 10px; font-weight: 700;
+    color: var(--accent); letter-spacing: 0.1em; margin-bottom: 0.35rem;
+  }
+  .flow-step-cmd {
+    font-family: var(--mono); font-size: 12px; color: var(--accent2);
+    margin-bottom: 0.25rem; font-weight: 600;
+  }
+  .flow-step-desc { font-size: 11px; color: var(--muted); }
+  .flow-sep {
+    padding: 1rem 0.25rem; color: var(--muted); font-size: 1rem;
+    align-self: center;
+  }
+
+  /* ── 구분선 ── */
+  hr { border: none; border-top: 1px solid var(--border); margin: 3rem 0; }
+
+  /* ── 풋터 ── */
+  footer {
+    margin-top: 4rem; padding: 2rem 0;
+    border-top: 1px solid var(--border);
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+
+  /* ── 스크롤바 ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">PrimeLog</div>
+  <div class="nav-links">
+    <a href="#overview">概览</a>
+    <a href="#install">安装</a>
+    <a href="#quickstart">快速上手</a>
+    <a href="#cli">CLI 命令</a>
+    <a href="#api">Python API</a>
+    <a href="#multiproject">多项目</a>
+    <a href="#architecture">架构</a>
+  </div>
+  <div class="version-badge">v0.1.3</div>
+</nav>
+
+<div class="layout">
+
+<aside>
+  <span class="sidebar-label">文档导航</span>
+  <a href="#overview">概览</a>
+  <a href="#install">安装</a>
+  <a href="#quickstart">快速上手</a>
+
+  <span class="sidebar-label">CLI 命令</span>
+  <a href="#cmd-register">register</a>
+  <a href="#cmd-loadmark">loadmark</a>
+  <a href="#cmd-scan">scan</a>
+  <a href="#cmd-export">export</a>
+  <a href="#cmd-show-errors">show-errors</a>
+  <a href="#cmd-stats">stats</a>
+  <a href="#cmd-archive">archive</a>
+
+  <span class="sidebar-label">Python API</span>
+  <a href="#api-init">init()</a>
+  <a href="#api-component">@component</a>
+  <a href="#api-scan">scan()</a>
+  <a href="#api-export">export()</a>
+  <a href="#api-getstats">get_stats()</a>
+
+  <span class="sidebar-label">进阶</span>
+  <a href="#multiproject">多项目隔离</a>
+  <a href="#architecture">架构设计</a>
+  <a href="#roadmap">路线图</a>
+</aside>
+
+<main>
+
+<!-- HERO -->
+<div class="hero" id="overview">
+  <div class="hero-eyebrow">RoseHammer · Open Source · MPL-2.0</div>
+  <h1>Prime<span>Log</span></h1>
+  <p class="hero-sub">
+    基于<strong>素数唯一分解定理</strong>的通用组件日志与可观测性框架。
+    任意组件调用事件被编码为单个整数，支持精确还原、模式挖掘与 Mathematica 张量分析。
+  </p>
+  <div class="hero-tagline">Decompose Anything. Understand Everything.</div>
+</div>
+
+<!-- INSTALL -->
+<section id="install">
+  <h2><span class="section-num">01</span>安装</h2>
+  <pre><span class="hl-cmt"># 标准安装</span>
+<span class="hl-cmd">pip install</span> <span class="hl-arg">primelog</span>
+
+<span class="hl-cmt"># 含分析工具（numpy / scipy / matplotlib）</span>
+<span class="hl-cmd">pip install</span> <span class="hl-arg">primelog[analysis]</span>
+
+<span class="hl-cmt"># 开发模式（修改代码立即生效）</span>
+<span class="hl-cmd">pip install</span> <span class="hl-flag">-e</span> <span class="hl-arg">.</span></pre>
+
+  <div class="callout tip">
+    <strong>💡 验证安装</strong>
+    安装成功后运行 <code>primelog version</code>，应输出 <code>primelog 0.1.3</code>。
+  </div>
+</section>
+
+<!-- QUICKSTART -->
+<section id="quickstart">
+  <h2><span class="section-num">02</span>快速上手</h2>
+  <p>三步把任意项目接入 PrimeLog：</p>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-step-num">STEP 01</div>
+      <div class="flow-step-cmd">loadmark</div>
+      <div class="flow-step-desc">标记要扫描的目录</div>
+    </div>
+    <div class="flow-sep">→</div>
+    <div class="flow-step">
+      <div class="flow-step-num">STEP 02</div>
+      <div class="flow-step-cmd">register</div>
+      <div class="flow-step-desc">给文件打印章</div>
+    </div>
+    <div class="flow-sep">→</div>
+    <div class="flow-step">
+      <div class="flow-step-num">STEP 03</div>
+      <div class="flow-step-cmd">scan + run</div>
+      <div class="flow-step-desc">扫描加载，正常运行</div>
+    </div>
+    <div class="flow-sep">→</div>
+    <div class="flow-step">
+      <div class="flow-step-num">STEP 04</div>
+      <div class="flow-step-cmd">show-errors</div>
+      <div class="flow-step-desc">查看调用日志</div>
+    </div>
+  </div>
+
+  <pre><span class="hl-cmt"># 1. 标记你的项目目录</span>
+<span class="hl-cmd">primelog loadmark</span> <span class="hl-flag">-r</span> <span class="hl-arg">./my_project</span>
+
+<span class="hl-cmt"># 2. 给所有服务文件打印章</span>
+<span class="hl-cmd">primelog register</span> <span class="hl-arg">./my_project/*.py</span> <span class="hl-flag">--type</span> <span class="hl-str">service</span> <span class="hl-flag">--project</span> <span class="hl-str">my-project</span>
+
+<span class="hl-cmt"># 3. 在你的入口脚本里加两行</span></pre>
+
+  <pre><span class="hl-kw">import</span> primelog
+
+primelog.<span class="hl-cmd">init</span>(<span class="hl-str">'my-project'</span>)          <span class="hl-cmt"># 设置项目名</span>
+primelog.<span class="hl-cmd">scan</span>(<span class="hl-str">'./my_project'</span>)        <span class="hl-cmt"># 扫描加载所有组件</span>
+
+<span class="hl-cmt"># ... 你原来的代码，一行不用改 ...</span>
+
+primelog.<span class="hl-cmd">export</span>()                     <span class="hl-cmt"># 导出日志到 ./logs/my-project/</span></pre>
+
+  <pre><span class="hl-cmt"># 4. 查看运行结果</span>
+<span class="hl-cmd">primelog show-errors</span> <span class="hl-flag">--project</span> <span class="hl-arg">my-project</span>
+<span class="hl-cmd">primelog stats</span>       <span class="hl-flag">--project</span> <span class="hl-arg">my-project</span></pre>
+</section>
+
+<!-- CLI -->
+<section id="cli">
+  <h2><span class="section-num">03</span>CLI 命令大全</h2>
+
+  <!-- register -->
+  <div class="cmd-card" id="cmd-register">
+    <div class="cmd-header">
+      <div class="cmd-name">register</div>
+      <div class="cmd-desc">给 .py 文件打上 PrimeLog 印章</div>
+      <div class="cmd-type cli">CLI</div>
+    </div>
+    <div class="cmd-body">
+      <p>自动在目标文件中插入 <code>import primelog</code> 和 <code>@primelog.component(...)</code> 装饰器。原文件自动备份为 <code>.bak</code>。若文件已有印章则跳过。</p>
+
+      <pre><span class="hl-cmd">primelog register</span> <span class="hl-arg">文件.py</span> <span class="hl-flag">--type</span> <span class="hl-str">TYPE</span> <span class="hl-flag">--project</span> <span class="hl-str">PROJECT</span> [<span class="hl-flag">--signature</span> <span class="hl-str">SIG</span>]</pre>
+
+      <table class="param-table">
+        <tr><th>参数</th><th>必填</th><th>说明</th></tr>
+        <tr>
+          <td class="param-name">files</td>
+          <td><span class="param-req">必填</span></td>
+          <td class="param-desc">.py 文件路径，支持通配符 <code>*.py</code>，可指定多个</td>
+        </tr>
+        <tr>
+          <td class="param-name">--type</td>
+          <td><span class="param-req">必填</span></td>
+          <td class="param-desc">组件类型，如 <code>service</code> <code>algorithm</code> <code>tool</code> <code>exporter</code> <code>source</code></td>
+        </tr>
+        <tr>
+          <td class="param-name">--project</td>
+          <td><span class="param-req">必填</span></td>
+          <td class="param-desc">项目名，作为组件名前缀，如 <code>pocket-optimizer</code></td>
+        </tr>
+        <tr>
+          <td class="param-name">--signature</td>
+          <td><span class="param-opt">可选</span></td>
+          <td class="param-desc">方法签名说明，如 <code>"run() -&gt; None"</code></td>
+        </tr>
+      </table>
+
+      <h3>示例</h3>
+      <pre><span class="hl-cmt"># 单文件</span>
+<span class="hl-cmd">primelog register</span> <span class="hl-arg">myservice.py</span> \
+  <span class="hl-flag">--type</span> <span class="hl-str">service</span> \
+  <span class="hl-flag">--project</span> <span class="hl-str">pocket-optimizer</span> \
+  <span class="hl-flag">--signature</span> <span class="hl-str">"run() -> None"</span>
+
+<span class="hl-cmt"># 批量（通配符）</span>
+<span class="hl-cmd">primelog register</span> <span class="hl-arg">algorithms/*.py</span> \
+  <span class="hl-flag">--type</span> <span class="hl-str">algorithm</span> \
+  <span class="hl-flag">--project</span> <span class="hl-str">pocket-optimizer</span></pre>
+
+      <h3>效果预览</h3>
+      <pre><span class="hl-cmt"># 打印章前</span>
+<span class="hl-kw">import</span> numpy <span class="hl-kw">as</span> np
+
+<span class="hl-kw">class</span> <span class="hl-arg">PSO</span>:
+    <span class="hl-kw">def</span> <span class="hl-cmd">run</span>(self): ...</pre>
+      <pre><span class="hl-cmt"># 打印章后（自动生成）</span>
+<span class="hl-kw">import</span> numpy <span class="hl-kw">as</span> np
+<span class="hl-kw">import</span> primelog
+
+<span class="hl-dec">@primelog.component</span>(<span class="hl-str">"pocket-optimizer.pso"</span>, type_=<span class="hl-str">"algorithm"</span>, signature=<span class="hl-str">"run() -> None"</span>)
+<span class="hl-kw">class</span> <span class="hl-arg">PSO</span>:
+    <span class="hl-kw">def</span> <span class="hl-cmd">run</span>(self): ...</pre>
+    </div>
+  </div>
+
+  <!-- loadmark -->
+  <div class="cmd-card" id="cmd-loadmark">
+    <div class="cmd-header">
+      <div class="cmd-name">loadmark</div>
+      <div class="cmd-desc">管理 __loadmark__ 标记文件</div>
+      <div class="cmd-type cli">CLI</div>
+    </div>
+    <div class="cmd-body">
+      <p><code>__loadmark__</code> 是一个空文件，放在目录里告诉 loader <em>"请扫描我"</em>。loadmark 命令专职管理这些标记，与注册器、加载器职责完全分离。</p>
+
+      <pre><span class="hl-cmd">primelog loadmark</span> [<span class="hl-flag">-r</span>] [<span class="hl-flag">-L</span> <span class="hl-arg">深度</span>] [<span class="hl-flag">-x</span>] <span class="hl-arg">目录</span></pre>
+
+      <table class="param-table">
+        <tr><th>参数</th><th>说明</th></tr>
+        <tr><td class="param-name">目录</td><td class="param-desc">目标目录路径</td></tr>
+        <tr><td class="param-name">-r</td><td class="param-desc">递归处理所有子目录（无深度限制）</td></tr>
+        <tr><td class="param-name">-L 深度</td><td class="param-desc">递归处理子目录，限制最大深度，如 <code>-L 3</code></td></tr>
+        <tr><td class="param-name">-x</td><td class="param-desc">消除标记（默认是添加）</td></tr>
+      </table>
+
+      <h3>示例</h3>
+      <pre><span class="hl-cmt"># 只标记当前目录</span>
+<span class="hl-cmd">primelog loadmark</span> <span class="hl-arg">./my_project</span>
+
+<span class="hl-cmt"># 递归标记所有子目录</span>
+<span class="hl-cmd">primelog loadmark</span> <span class="hl-flag">-r</span> <span class="hl-arg">./my_project</span>
+
+<span class="hl-cmt"># 限制深度为 2</span>
+<span class="hl-cmd">primelog loadmark</span> <span class="hl-flag">-L 2</span> <span class="hl-arg">./my_project</span>
+
+<span class="hl-cmt"># 消除标记</span>
+<span class="hl-cmd">primelog loadmark</span> <span class="hl-flag">-x</span> <span class="hl-arg">./my_project</span>
+
+<span class="hl-cmt"># 递归消除（-x 和 -r 组合）</span>
+<span class="hl-cmd">primelog loadmark</span> <span class="hl-flag">-x -r</span> <span class="hl-arg">./my_project</span>
+
+<span class="hl-cmt"># 递归消除，限制深度 3</span>
+<span class="hl-cmd">primelog loadmark</span> <span class="hl-flag">-x -L 3</span> <span class="hl-arg">./my_project</span></pre>
+    </div>
+  </div>
+
+  <!-- scan -->
+  <div class="cmd-card" id="cmd-scan">
+    <div class="cmd-header">
+      <div class="cmd-name">scan</div>
+      <div class="cmd-desc">扫描并加载所有带 __loadmark__ 的目录</div>
+      <div class="cmd-type cli">CLI</div>
+    </div>
+    <div class="cmd-body">
+      <p>遍历目标目录，找到所有含 <code>__loadmark__</code> 的子目录，自动 import 其中所有 .py 文件，触发 <code>@primelog.component</code> 注册。</p>
+      <pre><span class="hl-cmd">primelog scan</span> [<span class="hl-arg">目录</span>]   <span class="hl-cmt"># 默认当前目录</span></pre>
+      <div class="callout info">
+        <strong>ℹ️ 提示</strong>
+        在 Python 脚本里通常用 <code>primelog.scan('./my_project')</code>，CLI 版本适合快速检查哪些组件会被加载。
+      </div>
+    </div>
+  </div>
+
+  <!-- export -->
+  <div class="cmd-card" id="cmd-export">
+    <div class="cmd-header">
+      <div class="cmd-name">export</div>
+      <div class="cmd-desc">导出当前运行日志</div>
+      <div class="cmd-type cli">CLI</div>
+    </div>
+    <div class="cmd-body">
+      <p>将内存中的事件数据导出为 4 个文件：JSON 格式的邻接矩阵和错误事件，以及对应的 Wolfram Language (.wl) 格式。</p>
+      <pre><span class="hl-cmd">primelog export</span> [<span class="hl-flag">--project</span> <span class="hl-arg">名称</span>] [<span class="hl-flag">--out</span> <span class="hl-arg">目录</span>]</pre>
+      <table class="param-table">
+        <tr><th>参数</th><th>说明</th></tr>
+        <tr><td class="param-name">--project</td><td class="param-desc">项目名，日志写到 <code>&lt;out&gt;/&lt;project&gt;/</code>，留空则写到 <code>out</code> 根目录</td></tr>
+        <tr><td class="param-name">--out</td><td class="param-desc">输出根目录，默认 <code>./logs</code></td></tr>
+      </table>
+      <h3>输出文件</h3>
+      <pre><span class="hl-arg">logs/my-project/</span>
+  adjacency_matrix_20260221_102507<span class="hl-str">.json</span>   <span class="hl-cmt"># 静态依赖矩阵</span>
+  adjacency_matrix_20260221_102507<span class="hl-str">.wl</span>     <span class="hl-cmt"># 同上，Wolfram 格式</span>
+  error_events_20260221_102507<span class="hl-str">.json</span>       <span class="hl-cmt"># 错误事件列表（含时间戳）</span>
+  error_events_20260221_102507<span class="hl-str">.wl</span>         <span class="hl-cmt"># 同上，可直接在 Mathematica 分析</span></pre>
+    </div>
+  </div>
+
+  <!-- show-errors -->
+  <div class="cmd-card" id="cmd-show-errors">
+    <div class="cmd-header">
+      <div class="cmd-name">show-errors</div>
+      <div class="cmd-desc">显示错误事件详情</div>
+      <div class="cmd-type cli">CLI</div>
+    </div>
+    <div class="cmd-body">
+      <p>读取最新（或指定）日志文件，列出所有非正常调用事件，显示调用者、被调用者、错误类型、时间戳。</p>
+      <pre><span class="hl-cmd">primelog show-errors</span> [<span class="hl-arg">文件.json</span>] [<span class="hl-flag">--project</span> <span class="hl-arg">名称</span>] [<span class="hl-flag">--log-dir</span> <span class="hl-arg">目录</span>]</pre>
+      <h3>示例输出</h3>
+      <pre><span class="hl-cmt">错误事件详情</span>
+<span class="hl-cmt">──────────────────────────────────────────────────────</span>
+t=   1  pocket-optimizer.orchestrator   → pocket-optimizer.algorithm.pso
+       <span class="hl-flag">errors=['timeout']</span>  composite=2  2026-02-21T10:45:20
+<span class="hl-cmt">──────────────────────────────────────────────────────</span>
+共 1 个错误事件（总事件 42 条）</pre>
+    </div>
+  </div>
+
+  <!-- stats -->
+  <div class="cmd-card" id="cmd-stats">
+    <div class="cmd-header">
+      <div class="cmd-name">stats</div>
+      <div class="cmd-desc">统计错误分布</div>
+      <div class="cmd-type cli">CLI</div>
+    </div>
+    <div class="cmd-body">
+      <p>按错误类型、调用者、被调用者三个维度统计频次，帮助快速定位系统中的薄弱环节。</p>
+      <pre><span class="hl-cmd">primelog stats</span> [<span class="hl-arg">文件.json</span>] [<span class="hl-flag">--project</span> <span class="hl-arg">名称</span>] [<span class="hl-flag">--log-dir</span> <span class="hl-arg">目录</span>]</pre>
+    </div>
+  </div>
+
+  <!-- archive -->
+  <div class="cmd-card" id="cmd-archive">
+    <div class="cmd-header">
+      <div class="cmd-name">archive</div>
+      <div class="cmd-desc">归档旧日志（图书管理员）</div>
+      <div class="cmd-type cli">CLI</div>
+    </div>
+    <div class="cmd-body">
+      <p>将超过指定天数的日志文件压缩归档，保持 logs 目录整洁。支持 7z 和 tar.gz 两种压缩格式，支持守护模式定期自动归档。</p>
+      <pre><span class="hl-cmd">primelog archive</span> [<span class="hl-flag">--project</span> <span class="hl-arg">名称</span>] [<span class="hl-flag">--keep</span> <span class="hl-arg">天数</span>] [<span class="hl-flag">--compressor</span> <span class="hl-arg">7z|tar</span>]</pre>
+      <table class="param-table">
+        <tr><th>参数</th><th>说明</th></tr>
+        <tr><td class="param-name">--project</td><td class="param-desc">只归档指定项目，留空则归档所有项目</td></tr>
+        <tr><td class="param-name">--keep</td><td class="param-desc">保留最近 N 天，默认 30</td></tr>
+        <tr><td class="param-name">--compressor</td><td class="param-desc"><code>7z</code>（需安装 p7zip）或 <code>tar</code>（默认，无需额外安装）</td></tr>
+        <tr><td class="param-name">--log-dir</td><td class="param-desc">日志根目录，默认 <code>./logs</code></td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- PYTHON API -->
+<section id="api">
+  <h2><span class="section-num">04</span>Python API</h2>
+
+  <div class="cmd-card" id="api-init">
+    <div class="cmd-header">
+      <div class="cmd-name">primelog.init()</div>
+      <div class="cmd-desc">初始化项目，设置全局项目名</div>
+      <div class="cmd-type api">API</div>
+    </div>
+    <div class="cmd-body">
+      <p>在脚本开头调用一次。设置项目名后，<code>export()</code> 无需再传 <code>project</code> 参数。</p>
+      <pre><span class="hl-cmd">primelog.init</span>(project: str, log_base: str = <span class="hl-str">"./logs"</span>)</pre>
+      <pre><span class="hl-kw">import</span> primelog
+primelog.<span class="hl-cmd">init</span>(<span class="hl-str">'pocket-optimizer'</span>)
+<span class="hl-cmt"># 日志自动写到 ./logs/pocket-optimizer/</span>
+
+primelog.<span class="hl-cmd">init</span>(<span class="hl-str">'pocket-optimizer'</span>, log_base=<span class="hl-str">'/data/logs'</span>)
+<span class="hl-cmt"># 日志写到 /data/logs/pocket-optimizer/</span></pre>
+    </div>
+  </div>
+
+  <div class="cmd-card" id="api-component">
+    <div class="cmd-header">
+      <div class="cmd-name">@primelog.component</div>
+      <div class="cmd-desc">零概念接入装饰器</div>
+      <div class="cmd-type api">API</div>
+    </div>
+    <div class="cmd-body">
+      <p>加在 class 或 function 上，自动完成注册 + 调用追踪 + 错误记录。通常由 <code>primelog register</code> 命令自动插入，无需手写。</p>
+      <pre><span class="hl-dec">@primelog.component</span>(name: str, type_: str = <span class="hl-str">"component"</span>, signature: str = <span class="hl-str">""</span>)</pre>
+      <pre><span class="hl-dec">@primelog.component</span>(<span class="hl-str">'pocket-optimizer.algorithm.pso'</span>, type_=<span class="hl-str">'algorithm'</span>)
+<span class="hl-kw">class</span> <span class="hl-arg">PSO</span>:
+    <span class="hl-kw">def</span> <span class="hl-cmd">run</span>(self):
+        <span class="hl-cmt"># 所有方法调用自动进入 component_context</span>
+        <span class="hl-cmt"># 正常调用记 none，异常调用记错误类型</span>
+        ...</pre>
+      <div class="callout tip">
+        <strong>💡 组件命名规范</strong>
+        推荐格式：<code>项目名.模块.组件名</code>，例如 <code>pocket-optimizer.algorithm.pso</code>。同一项目内名称唯一。
+      </div>
+    </div>
+  </div>
+
+  <div class="cmd-card" id="api-scan">
+    <div class="cmd-header">
+      <div class="cmd-name">primelog.scan()</div>
+      <div class="cmd-desc">扫描并加载组件目录</div>
+      <div class="cmd-type api">API</div>
+    </div>
+    <div class="cmd-body">
+      <pre><span class="hl-cmd">primelog.scan</span>(directory: str = <span class="hl-str">"."</span>) -> int</pre>
+      <pre>n = primelog.<span class="hl-cmd">scan</span>(<span class="hl-str">'./my_project'</span>)
+<span class="hl-cmd">print</span>(<span class="hl-str">f"已加载 {n} 个组件"</span>)</pre>
+    </div>
+  </div>
+
+  <div class="cmd-card" id="api-export">
+    <div class="cmd-header">
+      <div class="cmd-name">primelog.export()</div>
+      <div class="cmd-desc">导出日志</div>
+      <div class="cmd-type api">API</div>
+    </div>
+    <div class="cmd-body">
+      <pre><span class="hl-cmd">primelog.export</span>(project: str = <span class="hl-str">""</span>, output_dir: str = <span class="hl-str">"./logs"</span>)</pre>
+      <pre><span class="hl-cmt"># init 后直接 export（推荐）</span>
+primelog.<span class="hl-cmd">init</span>(<span class="hl-str">'my-project'</span>)
+primelog.<span class="hl-cmd">export</span>()
+
+<span class="hl-cmt"># 或 export 时指定</span>
+primelog.<span class="hl-cmd">export</span>(project=<span class="hl-str">'my-project'</span>, output_dir=<span class="hl-str">'/data/logs'</span>)</pre>
+    </div>
+  </div>
+
+  <div class="cmd-card" id="api-getstats">
+    <div class="cmd-header">
+      <div class="cmd-name">primelog.get_stats()</div>
+      <div class="cmd-desc">获取当前运行统计（不导出文件）</div>
+      <div class="cmd-type api">API</div>
+    </div>
+    <div class="cmd-body">
+      <pre>stats = primelog.<span class="hl-cmd">get_stats</span>()
+<span class="hl-cmt"># 返回：</span>
+<span class="hl-cmt"># {</span>
+<span class="hl-cmt">#   'total_events': 42,</span>
+<span class="hl-cmt">#   'error_distribution': {'none': 40, 'timeout': 2},</span>
+<span class="hl-cmt">#   'enabled': True</span>
+<span class="hl-cmt"># }</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- 多项目 -->
+<section id="multiproject">
+  <h2><span class="section-num">05</span>多项目隔离</h2>
+  <p>不同项目使用同一个 PrimeLog 安装，通过<strong>项目名命名空间</strong>实现完全隔离。</p>
+
+  <h3>日志目录结构</h3>
+  <pre><span class="hl-arg">logs/</span>
+  <span class="hl-arg">pocket-optimizer/</span>            <span class="hl-cmt"># 项目 A 的日志</span>
+    error_events_20260221.json
+    adjacency_matrix_20260221.json
+  <span class="hl-arg">primelog/</span>                     <span class="hl-cmt"># 项目 B 的日志</span>
+    error_events_20260221.json
+    adjacency_matrix_20260221.json
+  <span class="hl-arg">my-new-project/</span>               <span class="hl-cmt"># 项目 C 的日志</span>
+    ...</pre>
+
+  <h3>组件命名规范</h3>
+  <pre><span class="hl-cmt"># 项目 A</span>
+<span class="hl-dec">@primelog.component</span>(<span class="hl-str">'pocket-optimizer.algorithm.pso'</span>, ...)
+
+<span class="hl-cmt"># 项目 B</span>
+<span class="hl-dec">@primelog.component</span>(<span class="hl-str">'primelog.core.registry'</span>, ...)
+
+<span class="hl-cmt"># 永远不会冲突，因为前缀不同</span></pre>
+
+  <h3>CLI 过滤</h3>
+  <pre><span class="hl-cmd">primelog show-errors</span> <span class="hl-flag">--project</span> <span class="hl-arg">pocket-optimizer</span>
+<span class="hl-cmd">primelog stats</span>       <span class="hl-flag">--project</span> <span class="hl-arg">primelog</span>
+<span class="hl-cmd">primelog archive</span>     <span class="hl-flag">--project</span> <span class="hl-arg">pocket-optimizer</span> <span class="hl-flag">--keep</span> <span class="hl-arg">30</span></pre>
+</section>
+
+<!-- 架构 -->
+<section id="architecture">
+  <h2><span class="section-num">06</span>架构设计</h2>
+  <p>PrimeLog 由三个职责完全独立的核心模块组成：</p>
+
+  <div class="triad">
+    <div class="triad-item">
+      <div class="triad-icon">📋</div>
+      <div class="triad-name">registry.py</div>
+      <div class="triad-role">注册器<br>组件发现与依赖追踪</div>
+    </div>
+    <div class="triad-item">
+      <div class="triad-icon">🔍</div>
+      <div class="triad-name">loader.py</div>
+      <div class="triad-role">加载器<br>自动扫描 __loadmark__ 目录</div>
+    </div>
+    <div class="triad-item">
+      <div class="triad-icon">🔢</div>
+      <div class="triad-name">error_log.py</div>
+      <div class="triad-role">报错器<br>素数编码事件记录</div>
+    </div>
+  </div>
+
+  <h3>数学原理</h3>
+  <p>每种错误类型映射到唯一素数。一次调用的复合值 = 所有错误素数之积。</p>
+  <pre><span class="hl-cmt">prime_map = {</span>
+<span class="hl-cmt">    "none":              1,   # 无错误（乘法单位元）</span>
+<span class="hl-cmt">    "timeout":           2,</span>
+<span class="hl-cmt">    "permission_denied": 3,</span>
+<span class="hl-cmt">    "file_not_found":    5,</span>
+<span class="hl-cmt">    "network_error":     7,</span>
+<span class="hl-cmt">    ...                       # 可动态扩展</span>
+<span class="hl-cmt">}</span>
+
+<span class="hl-cmt"># timeout + file_not_found = 2 × 5 = 10</span>
+<span class="hl-cmt"># 唯一分解定理保证：10 只能还原为 {timeout, file_not_found}</span></pre>
+
+  <h3>工具层（tools/）</h3>
+  <p>所有可视化和分析工具与核心三件套完全解耦，读取日志文件工作，系统扩展多大它们都能用。</p>
+  <pre><span class="hl-arg">tools/</span>
+  show_errors.py           <span class="hl-cmt"># 错误详情</span>
+  stats_advanced.py        <span class="hl-cmt"># 统计分析</span>
+  histogram.py             <span class="hl-cmt"># 错误频率直方图</span>
+  timeline_analysis.py     <span class="hl-cmt"># 时间序列分析</span>
+  timeline_visualization.py<span class="hl-cmt"># 可视化时间线</span>
+  fft_analyzer.c           <span class="hl-cmt"># FFT 频域分析（C 实现）</span>
+  preprocess_events_for_fft.py
+  debug_single.py          <span class="hl-cmt"># 单组件调试</span>
+  register_file.py         <span class="hl-cmt"># 自动打印章</span>
+  loadmark.py              <span class="hl-cmt"># 标记管理</span></pre>
+
+  <div class="callout info">
+    <strong>ℹ️ Wolfram Language 集成</strong>
+    导出的 .wl 文件可直接在 Mathematica 中 <code>Get["error_events.wl"]</code> 加载，然后对 <code>errorTensor</code> 做张量分解、聚类、FFT 等分析。
+  </div>
+</section>
+
+<!-- ROADMAP -->
+<section id="roadmap">
+  <h2><span class="section-num">07</span>路线图</h2>
+  <table class="param-table">
+    <tr><th>版本</th><th>功能</th><th>状态</th></tr>
+    <tr>
+      <td class="param-name">v0.1.x</td>
+      <td class="param-desc">核心三件套 + CLI 全命令 + 多项目隔离 + 自动打印章 + loadmark 管理</td>
+      <td><span style="color:var(--accent2)">✅ 完成</span></td>
+    </tr>
+    <tr>
+      <td class="param-name">v0.2.x</td>
+      <td class="param-desc">工具层函数化（支持 import 调用）+ 多项目事件流完全隔离 + PrimeLog 上下文对象</td>
+      <td><span style="color:var(--accent3)">📋 规划中</span></td>
+    </tr>
+    <tr>
+      <td class="param-name">v0.3.x</td>
+      <td class="param-desc">Web 可视化仪表盘 + 实时流式日志</td>
+      <td><span style="color:var(--muted)">💭 概念阶段</span></td>
+    </tr>
+    <tr>
+      <td class="param-name">v1.0.0</td>
+      <td class="param-desc">PyPI 正式发布 + 完整测试覆盖 + 文档站</td>
+      <td><span style="color:var(--muted)">💭 概念阶段</span></td>
+    </tr>
+  </table>
+</section>
+
+<footer>
+  <div>PrimeLog v0.1.3 — MPL-2.0 — RoseHammer</div>
+  <div><a href="https://github.com/TurinFohlen/PrimeLog">github.com/TurinFohlen/PrimeLog</a></div>
+</footer>
+
+</main>
+</div>
+
+<script>
+  // 侧边栏高亮当前节
+  const sections = document.querySelectorAll('section[id], div[id]');
+  const links = document.querySelectorAll('aside a');
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`aside a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

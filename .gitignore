@@ -1,0 +1,33 @@
+# Python 字节码
+__pycache__/
+*.pyc
+
+# 虚拟环境
+venv/
+env/
+.env/
+
+# 构建产物
+dist/
+build/
+*.egg-info/
+legacy/
+# 日志文件
+logs/
+
+# PrimeLog 配置文件（包含组件注册信息，可能包含敏感数据，建议忽略）
+components.yaml
+
+# 编辑器临时文件
+*.swp
+*.swo
+*~
+.legacy/
+# 测试缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 操作系统文件
+.DS_Store
+Thumbs.db

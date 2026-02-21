@@ -1,2 +1,0 @@
-[console_scripts]
-primelog = primelog.cli:main
