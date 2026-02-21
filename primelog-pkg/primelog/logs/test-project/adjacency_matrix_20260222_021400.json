@@ -1,0 +1,70 @@
+{
+  "metadata": {
+    "timestamp": "20260222_021400",
+    "n_components": 3,
+    "format_version": "2.0",
+    "description": "静态依赖矩阵（带权，权值为关系类型素数）"
+  },
+  "nodes": [
+    "primelog.core.orchestrator",
+    "test-project.compA",
+    "test-project.compB"
+  ],
+  "relation_prime_map": {
+    "internal.sync": 2,
+    "internal.async": 3,
+    "internal.event": 5,
+    "internal.config": 7,
+    "internal.registry": 11,
+    "runtime": 13,
+    "rpc": 17,
+    "db_query": 19,
+    "file_io": 23,
+    "http_request": 29,
+    "pipeline": 31,
+    "init": 37,
+    "destroy": 41,
+    "health_check": 43,
+    "metrics": 47,
+    "config_read": 53,
+    "config_write": 59,
+    "cache": 61,
+    "lock": 67,
+    "transaction": 71,
+    "validation": 73,
+    "notification": 79
+  },
+  "adjacency_csr": {
+    "data": [
+      2,
+      13
+    ],
+    "indices": [
+      2,
+      1
+    ],
+    "row_ptrs": [
+      0,
+      0,
+      1,
+      2
+    ]
+  },
+  "adjacency_triples": [
+    [
+      1,
+      2,
+      2
+    ],
+    [
+      2,
+      1,
+      13
+    ]
+  ],
+  "triples_schema": [
+    "row_index",
+    "col_index",
+    "value"
+  ]
+}

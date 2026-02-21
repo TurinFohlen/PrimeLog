@@ -1,0 +1,69 @@
+version: '1.0'
+total_components: 3
+components:
+- name: primelog.core.orchestrator
+  type: orchestrator
+  signature: dispatch(command, **kwargs)
+  dependencies: []
+  typed_dependencies: []
+  registration_order: 0
+  source_file: ../core/orchestrator.py
+  class_name: _OrchestratorSentinel
+- name: test-project.compA
+  type: test
+  signature: call_b()
+  dependencies:
+  - test-project.compB
+  typed_dependencies:
+  - !!python/tuple
+    - test-project.compB
+    - internal.sync
+  registration_order: 1
+  source_file: test_integration.py
+  class_name: CompA
+- name: test-project.compB
+  type: test
+  signature: do_something()
+  dependencies: []
+  typed_dependencies: []
+  registration_order: 2
+  source_file: test_integration.py
+  class_name: CompB
+adjacency_matrix:
+  nodes:
+  - primelog.core.orchestrator
+  - test-project.compA
+  - test-project.compB
+  csr_format:
+    data:
+    - 2
+    indices:
+    - 2
+    row_ptrs:
+    - 0
+    - 0
+    - 1
+    - 1
+  relation_prime_map:
+    internal.sync: 2
+    internal.async: 3
+    internal.event: 5
+    internal.config: 7
+    internal.registry: 11
+    runtime: 13
+    rpc: 17
+    db_query: 19
+    file_io: 23
+    http_request: 29
+    pipeline: 31
+    init: 37
+    destroy: 41
+    health_check: 43
+    metrics: 47
+    config_read: 53
+    config_write: 59
+    cache: 61
+    lock: 67
+    transaction: 71
+    validation: 73
+    notification: 79

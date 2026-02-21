@@ -1,0 +1,10 @@
+pyyaml>=6.0
+
+[all]
+primelog[analysis]
+
+[analysis]
+numpy>=1.21
+scipy>=1.7
+matplotlib>=3.5
+pandas>=1.3

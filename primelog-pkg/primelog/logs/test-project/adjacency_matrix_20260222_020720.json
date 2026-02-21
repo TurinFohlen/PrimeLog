@@ -1,0 +1,46 @@
+{
+  "metadata": {
+    "timestamp": "20260222_020720",
+    "n_components": 3,
+    "format_version": "1.0",
+    "description": "静态依赖矩阵 A：A[i][j]=1 表示组件 i 静态依赖组件 j"
+  },
+  "nodes": [
+    "primelog.core.orchestrator",
+    "test-project.compA",
+    "test-project.compB"
+  ],
+  "adjacency_csr": {
+    "data": [
+      13,
+      13
+    ],
+    "indices": [
+      2,
+      1
+    ],
+    "row_ptrs": [
+      0,
+      0,
+      1,
+      2
+    ]
+  },
+  "adjacency_triples": [
+    [
+      1,
+      2,
+      1
+    ],
+    [
+      2,
+      1,
+      1
+    ]
+  ],
+  "triples_schema": [
+    "row_index",
+    "col_index",
+    "value"
+  ]
+}
