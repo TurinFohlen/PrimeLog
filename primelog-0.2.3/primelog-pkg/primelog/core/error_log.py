@@ -138,25 +138,68 @@ def decode_errors(composite: int) -> List[str]:
 
 
 # ─────────────────────────────────────────────
-# 4. 全局事件存储（线程安全）
+# 4. 全局事件存储（多项目线程安全）
 # ─────────────────────────────────────────────
+# 架构说明：
+#   _project_store[key] = {
+#       'events':        List[Tuple],   # (t, caller_idx, callee_idx, error_set)
+#       'timed_events':  List[Tuple],   # (timestamp, caller_idx, callee_idx, error_set)
+#       'export_dir':    str,
+#       'event_counter': int,
+#   }
+#   _thread_local.project_key 存储当前线程绑定的项目 key（线程私有）
+#   record_event / export_* 通过 _get_project_store() 路由到对应项目
+#
+# 向后兼容：
+#   _events / _timed_events / export_dir / _event_counter 仍作为
+#   "无项目"模式的 fallback，行为与旧版完全一致。
 
+_project_store: Dict[str, dict] = {}       # project_key → 项目状态
+_thread_local  = threading.local()         # .project_key（线程私有）
+_store_lock    = threading.Lock()          # 保护 _project_store 结构修改
+
+# fallback（无项目模式，向后兼容）
 _events: List[Tuple[int, int, int, List[str]]] = []
-# 每个元素格式：(t, caller_index, callee_index, error_set)
-
-# ===== 新增：带真实时间戳的事件存储（与 _events 顺序严格一致）=====
 _timed_events: List[Tuple[str, int, int, List[str]]] = []
-# 每个元素格式：(timestamp_iso, caller_index, callee_index, error_set)
-# ===============================================================
-
 _event_counter = 0
 _lock = threading.Lock()
 
 # 是否启用日志（可动态切换）
 enabled: bool = True
 
-# 导出目录（默认为当前目录）
+# 导出目录（默认为当前目录，无项目模式使用）
 export_dir: str = "."
+
+
+def _init_project(key: str, proj_export_dir: str = ".") -> None:
+    """初始化一个项目的存储槽（幂等）"""
+    with _store_lock:
+        if key not in _project_store:
+            _project_store[key] = {
+                'events':        [],
+                'timed_events':  [],
+                'export_dir':    proj_export_dir,
+                'event_counter': 0,
+            }
+        elif proj_export_dir != ".":
+            _project_store[key]['export_dir'] = proj_export_dir
+
+
+def _bind_thread(key: str) -> None:
+    """绑定当前线程到指定项目 key"""
+    _thread_local.project_key = key
+
+
+def _get_project_store() -> dict:
+    """
+    返回当前线程绑定项目的 store dict。
+    若无绑定，返回 fallback（使用模块级全局变量的伪 store）。
+    """
+    key = getattr(_thread_local, 'project_key', None)
+    if key and key in _project_store:
+        return _project_store[key]
+    # fallback：返回引用模块全局变量的视图（向后兼容）
+    return None   # None 表示使用 fallback 路径
 
 
 def _get_component_index(name: Optional[str], components: Dict) -> int:
@@ -182,13 +225,7 @@ def record_event(
 ) -> None:
     """
     记录一次组件调用事件。
-    仅当 caller 存在且 caller ≠ callee 时记录，避免记录自调用。
-
-    参数：
-        caller_name:  调用者组件名（None 表示顶层调用，不记录）
-        callee_name:  被调用者组件名
-        error_set:    本次调用的错误类型列表
-        components:   来自 registry.components 的字典（用于索引映射）
+    自动路由到当前线程绑定项目的 store；无绑定时写 fallback 全局列表。
     """
     global _event_counter
 
@@ -200,24 +237,28 @@ def record_event(
     try:
         caller_idx = _get_component_index(caller_name, components)
         callee_idx = _get_component_index(callee_name, components)
-
         if caller_idx == -1 or callee_idx == -1:
-            return  # 防御：未知组件不记录
+            return
 
-        with _lock:
-            t = _event_counter
-            _event_counter += 1
-            # 确保 error_set 中所有键都在 prime_map 中（若没有则注册）
-            for err in error_set:
-                if err not in prime_map:
-                    register_error_type(err)
+        for err in error_set:
+            if err not in prime_map:
+                register_error_type(err)
 
-            # 原有事件存储（无时间戳）
-            _events.append((t, caller_idx, callee_idx, list(error_set)))
+        timestamp = datetime.now().isoformat()
+        store = _get_project_store()
 
-            # 带真实时间戳的事件存储
-            timestamp = datetime.now().isoformat()
-            _timed_events.append((timestamp, caller_idx, callee_idx, list(error_set)))
+        if store is not None:
+            with _store_lock:
+                t = store['event_counter']
+                store['event_counter'] += 1
+                store['events'].append((t, caller_idx, callee_idx, list(error_set)))
+                store['timed_events'].append((timestamp, caller_idx, callee_idx, list(error_set)))
+        else:
+            with _lock:
+                t = _event_counter
+                _event_counter += 1
+                _events.append((t, caller_idx, callee_idx, list(error_set)))
+                _timed_events.append((timestamp, caller_idx, callee_idx, list(error_set)))
 
     except Exception as e:
         # 日志记录失败不影响主流程
@@ -229,40 +270,47 @@ def record_event(
 # ─────────────────────────────────────────────
 
 def _get_adjacency_list(registry_instance) -> Dict[str, Any]:
-    """从注册中心获取邻接矩阵数据"""
+    """从注册中心获取邻接矩阵数据（带权）"""
     try:
         return registry_instance.get_adjacency_matrix()
     except Exception:
-        return {"nodes": [], "csr_format": {"data": [], "indices": [], "row_ptrs": [0]}}
+        return {
+            "nodes": [],
+            "csr_format": {"data": [], "indices": [], "row_ptrs": [0]},
+            "relation_prime_map": {}
+        }
 
 
 # ── JSON 格式 ──────────────────────────────────
 
 def export_adjacency_json(registry_instance, filepath: Optional[str] = None) -> str:
-    """【独立文件①】仅导出静态依赖矩阵 A 到 JSON。"""
+    """【独立文件①】仅导出静态依赖矩阵 A 到 JSON（带权）。"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     if filepath is None:
-        filepath = os.path.join(export_dir, f"adjacency_matrix_{timestamp}.json")
+        filepath = os.path.join((_get_project_store() or {}).get("export_dir", export_dir), f"adjacency_matrix_{timestamp}.json")
 
-    adj      = _get_adjacency_list(registry_instance)
-    nodes    = adj.get("nodes", [])
-    csr      = adj.get("csr_format", {})
+    adj = _get_adjacency_list(registry_instance)
+    nodes = adj.get("nodes", [])
+    csr = adj.get("csr_format", {})
     row_ptrs = csr.get("row_ptrs", [0])
-    indices  = csr.get("indices",  [])
+    indices = csr.get("indices", [])
+    data = csr.get("data", [])
+    rel_map = adj.get("relation_prime_map", {})
 
     triples = []
     for i, (rp_start, rp_end) in enumerate(zip(row_ptrs[:-1], row_ptrs[1:])):
         for k in range(rp_start, rp_end):
-            triples.append([i, indices[k], 1])
+            triples.append([i, indices[k], data[k]])
 
     payload = {
         "metadata": {
             "timestamp": timestamp,
             "n_components": len(nodes),
-            "format_version": "1.0",
-            "description": "静态依赖矩阵 A：A[i][j]=1 表示组件 i 静态依赖组件 j"
+            "format_version": "2.0",
+            "description": "静态依赖矩阵（带权，权值为关系类型素数）"
         },
         "nodes": nodes,
+        "relation_prime_map": rel_map,
         "adjacency_csr": csr,
         "adjacency_triples": triples,
         "triples_schema": ["row_index", "col_index", "value"]
@@ -281,22 +329,23 @@ def export_events_json(filepath: Optional[str] = None) -> str:
     【独立文件②】导出错误事件列表（含时间戳字段，向后兼容）。
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    store = _get_project_store()
+    _ev  = store['events']       if store else _events
+    _tev = store['timed_events'] if store else _timed_events
+    _dir = store['export_dir']   if store else export_dir
     if filepath is None:
-        filepath = os.path.join(export_dir, f"error_events_{timestamp}.json")
+        filepath = os.path.join(_dir, f"error_events_{timestamp}.json")
 
-    # 生成事件列表（无时间戳，与原来完全一致）
     events_export = [
         [t, ci, cj, composite_value(err_set), log_composite_value(err_set)]
-        for t, ci, cj, err_set in _events
+        for t, ci, cj, err_set in _ev
     ]
-
-    # 生成时间戳列表（从 _timed_events 提取，顺序与 events 对应）
-    timestamps = [ts for ts, _, _, _ in _timed_events]
+    timestamps = [ts for ts, _, _, _ in _tev]
 
     payload = {
         "metadata": {
             "timestamp": timestamp,
-            "n_events": len(_events),
+            "n_events": len(_ev),
             "format_version": "1.0",
             "description": "运行时错误事件列表（素数编码，可选时间戳）"
         },
@@ -317,21 +366,23 @@ def export_events_json(filepath: Optional[str] = None) -> str:
 # ── Wolfram Language 格式 ─────────────────────
 
 def export_adjacency_wl(registry_instance, filepath: Optional[str] = None) -> str:
-    """【独立文件③】仅导出静态依赖矩阵 A 到 Wolfram Language (.wl)。"""
+    """【独立文件③】仅导出静态依赖矩阵 A 到 Wolfram Language (.wl)（带权）。"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     if filepath is None:
-        filepath = os.path.join(export_dir, f"adjacency_matrix_{timestamp}.wl")
+        filepath = os.path.join((_get_project_store() or {}).get("export_dir", export_dir), f"adjacency_matrix_{timestamp}.wl")
 
-    adj      = _get_adjacency_list(registry_instance)
-    nodes    = adj.get("nodes", [])
-    n        = len(nodes)
-    csr      = adj.get("csr_format", {})
+    adj = _get_adjacency_list(registry_instance)
+    nodes = adj.get("nodes", [])
+    n = len(nodes)
+    csr = adj.get("csr_format", {})
     row_ptrs = csr.get("row_ptrs", [0])
-    indices  = csr.get("indices",  [])
+    indices = csr.get("indices", [])
+    data = csr.get("data", [])
+    rel_map = adj.get("relation_prime_map", {})
 
     lines = []
     lines.append("(* ============================================================")
-    lines.append("   静态依赖矩阵 A - 由 error_log.py 自动生成")
+    lines.append("   静态依赖矩阵（带权）- 由 error_log.py 自动生成")
     lines.append(f"   生成时间: {timestamp}    组件数量: {n}")
     lines.append("   使用方式: Get[\"adjacency_matrix.wl\"]")
     lines.append("   ============================================================ *)")
@@ -341,11 +392,18 @@ def export_adjacency_wl(registry_instance, filepath: Optional[str] = None) -> st
     lines.append(f"n = {n};             (* 组件总数 *)")
     lines.append("")
 
+    # 输出关系映射
+    rel_entries = ", ".join(f'"{k}"->{v}' for k, v in rel_map.items())
+    lines.append(f"relationPrimeMap = <|{rel_entries}|>;")
+    lines.append("")
+
+    # 构建 SparseArray 规则
     sparse_rules = []
     for i, (rp_start, rp_end) in enumerate(zip(row_ptrs[:-1], row_ptrs[1:])):
         for k in range(rp_start, rp_end):
             j = indices[k]
-            sparse_rules.append(f"{{{i+1},{j+1}}}->1")
+            prime = data[k]
+            sparse_rules.append(f"{{{i+1},{j+1}}}->{prime}")
 
     if sparse_rules:
         rules_wl = "{" + ", ".join(sparse_rules) + "}"
@@ -354,7 +412,7 @@ def export_adjacency_wl(registry_instance, filepath: Optional[str] = None) -> st
         lines.append(f"staticDepA = SparseArray[{{}}, {{{n},{n}}}];")
     lines.append("")
     lines.append("(* 查看矩阵: MatrixForm[Normal[staticDepA]] *)")
-    lines.append("(* 找出所有依赖对: Position[Normal[staticDepA], 1] *)")
+    lines.append("(* 找出所有依赖对及其类型: Select[ArrayRules[staticDepA], #[[2]]!=0 &] *)")
 
     os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
     with open(filepath, "w", encoding="utf-8") as f:
@@ -370,11 +428,15 @@ def export_events_wl(registry_instance, filepath: Optional[str] = None) -> str:
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     if filepath is None:
-        filepath = os.path.join(export_dir, f"error_events_{timestamp}.wl")
+        store_w  = _get_project_store()
+        _ev_w    = store_w['events']       if store_w else _events
+        _tev_w   = store_w['timed_events'] if store_w else _timed_events
+        _dir_w   = store_w['export_dir']   if store_w else export_dir
+        filepath = os.path.join(_dir_w, f"error_events_{timestamp}.wl")
 
     adj     = _get_adjacency_list(registry_instance)
     n       = len(adj.get("nodes", []))
-    total_t = len(_events)
+    total_t = len(_ev_w)
 
     lines = []
     lines.append("(* ============================================================")
@@ -390,7 +452,7 @@ def export_events_wl(registry_instance, filepath: Optional[str] = None) -> str:
     lines.append("")
 
     # 导出时间戳列表
-    timestamps_list = [f'"{ts}"' for ts, _, _, _ in _timed_events]
+    timestamps_list = [f'"{ts}"' for ts, _, _, _ in _tev_w]
     if timestamps_list:
         timestamps_wl = "{" + ", ".join(timestamps_list) + "}"
     else:
@@ -461,7 +523,9 @@ def export_error_log(registry_instance=None) -> None:
             print("[error_log] 无法获取 registry 实例，跳过导出", file=sys.stderr)
             return
 
-    if not _events:
+    _chk = _get_project_store()
+    _ev_chk = _chk['events'] if _chk else _events
+    if not _ev_chk:
         print("[error_log] 无事件记录，跳过导出", file=sys.stderr)
         return
 

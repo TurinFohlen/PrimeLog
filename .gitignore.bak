@@ -11,7 +11,8 @@ env/
 dist/
 build/
 *.egg-info/
-
+legacy/
+.bak
 # 日志文件
 logs/
 
