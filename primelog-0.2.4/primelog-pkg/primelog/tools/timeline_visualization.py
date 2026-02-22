@@ -18,6 +18,7 @@ timeline_visualization.py - 基于时间戳的错误事件ASCII可视化工具�
 """
 
 import json
+from primelog.tools.common import decode_event
 import sys
 import argparse
 import math
@@ -243,8 +244,7 @@ def print_multi_timeline(events_data, prime_map, interval=timedelta(minutes=5),
     
     for event, ts in zip(events_data, timestamps):
         dt = datetime.fromisoformat(ts)
-        composite = event[3]
-        errors = decode_errors(composite, prime_map)
+        errors = decode_event(event, prime_map)
         for err in errors:
             if err != "none":
                 error_timeline[err].append(dt)

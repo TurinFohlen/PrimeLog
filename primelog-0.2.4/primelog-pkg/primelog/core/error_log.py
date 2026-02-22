@@ -202,6 +202,29 @@ def _get_project_store() -> dict:
     return None   # None 表示使用 fallback 路径
 
 
+def log_to_composite(log_value: float) -> int:
+    """
+    对数值 → 素数乘积（四舍五入取整）。
+    浮点误差通过取整消除，结果精确还原原始整数乘积。
+
+    示例：
+        log_to_composite(math.log(2 * 5)) == 10
+    """
+    return round(math.exp(log_value))
+
+
+def decode_from_log(log_value: float) -> List[str]:
+    """
+    对数值 → 错误类型列表。
+    先调用 log_to_composite 还原乘积，再进行素数因数分解。
+
+    示例：
+        decode_from_log(math.log(2 * 5))  # ["timeout", "file_not_found"]
+    """
+    composite = log_to_composite(log_value)
+    return decode_errors(composite)
+
+
 def _get_component_index(name: Optional[str], components: Dict) -> int:
     """
     根据组件名获取其在注册中心中的排序索引。
@@ -326,7 +349,11 @@ def export_adjacency_json(registry_instance, filepath: Optional[str] = None) -> 
 
 def export_events_json(filepath: Optional[str] = None) -> str:
     """
-    【独立文件②】导出错误事件列表（含时间戳字段，向后兼容）。
+    【独立文件②】导出错误事件列表。
+
+    存储策略（v2.0）：
+        只存 errors（明文列表）+ log_value（浮点对数），不存大整数 composite。
+        恢复乘积：round(exp(log_value))，再进行素数因수분解。
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     store = _get_project_store()
@@ -336,23 +363,27 @@ def export_events_json(filepath: Optional[str] = None) -> str:
     if filepath is None:
         filepath = os.path.join(_dir, f"error_events_{timestamp}.json")
 
+    timestamps = [ts for ts, _, _, _ in _tev]
     events_export = [
-        [t, ci, cj, composite_value(err_set), log_composite_value(err_set)]
+        [t, ci, cj, log_composite_value(err_set)]
         for t, ci, cj, err_set in _ev
     ]
-    timestamps = [ts for ts, _, _, _ in _tev]
 
     payload = {
         "metadata": {
-            "timestamp": timestamp,
-            "n_events": len(_ev),
-            "format_version": "1.0",
-            "description": "运行时错误事件列表（素数编码，可选时间戳）"
+            "timestamp":      timestamp,
+            "n_events":       len(_ev),
+            "format_version": "2.0",
+            "description":    (
+                "运行时错误事件列表（对数编码）。"
+                "恢复乘积：round(exp(log_value))，可进行素数因数分解。"
+            ),
+            "recovery_hint":  "composite = round(exp(log_value))"
         },
-        "prime_map": prime_map,
-        "timestamps": timestamps,
-        "events": events_export,
-        "events_schema": ["t", "caller_index", "callee_index", "composite_value", "log_value"]
+        "prime_map":     prime_map,
+        "timestamps":    timestamps,
+        "events":        events_export,
+        "events_schema": ["t", "caller_index", "callee_index", "log_value"]
     }
 
     os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
@@ -427,11 +458,11 @@ def export_events_wl(registry_instance, filepath: Optional[str] = None) -> str:
     【独立文件④】导出错误事件列表（含时间戳变量，向后兼容）到 Wolfram Language (.wl)。
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    store_w  = _get_project_store()
+    _ev_w    = store_w['events']       if store_w else _events
+    _tev_w   = store_w['timed_events'] if store_w else _timed_events
+    _dir_w   = store_w['export_dir']   if store_w else export_dir
     if filepath is None:
-        store_w  = _get_project_store()
-        _ev_w    = store_w['events']       if store_w else _events
-        _tev_w   = store_w['timed_events'] if store_w else _timed_events
-        _dir_w   = store_w['export_dir']   if store_w else export_dir
         filepath = os.path.join(_dir_w, f"error_events_{timestamp}.wl")
 
     adj     = _get_adjacency_list(registry_instance)
@@ -460,12 +491,14 @@ def export_events_wl(registry_instance, filepath: Optional[str] = None) -> str:
     lines.append(f"timestamps = {timestamps_wl};  (* 与 events 对应的时间戳列表 *)")
     lines.append("")
 
-    lines.append("(* 事件格式: {t, caller_index, callee_index, composite_value} *)")
-    if _events:
+    lines.append("(* 事件格式: {t, caller_index, callee_index, errors_list, log_value} *)")
+    lines.append("(* 恢复乘积: Round[Exp[logValue]]  恢复错误: 对乘积做素数因数分解 *)")
+    if _ev_w:
         event_lines = []
-        for t, ci, cj, err_set in _events:
-            cv = composite_value(err_set)
-            event_lines.append(f"  {{{t+1},{ci+1},{cj+1},{cv}}}")
+        for t, ci, cj, err_set in _ev_w:
+            lv  = log_composite_value(err_set)
+            errs_wl = "{" + ", ".join(f'"{e}"' for e in err_set) + "}"
+            event_lines.append(f"  {{{t+1},{ci+1},{cj+1},{errs_wl},{lv:.10f}}}")
         events_wl = "{\n" + ",\n".join(event_lines) + "\n}"
     else:
         events_wl = "{}"
@@ -475,12 +508,12 @@ def export_events_wl(registry_instance, filepath: Optional[str] = None) -> str:
 
     lines.append("(* 三维稀疏对数错误张量 errorTensor[[caller, callee, t]] *)")
     lines.append(f"(* 需先加载 adjacency_matrix.wl 以获得 n *)")
-    if _events:
+    if _ev_w:
         tensor_rules = []
-        for t, ci, cj, err_set in _events:
+        for t, ci, cj, err_set in _ev_w:
             lv = log_composite_value(err_set)
             if lv > 0:
-                tensor_rules.append(f"  {{{ci+1},{cj+1},{t+1}}}->{lv:.8f}")
+                tensor_rules.append(f"  {{{ci+1},{cj+1},{t+1}}}->{lv:.10f}")
         if tensor_rules:
             tr_wl = "{\n" + ",\n".join(tensor_rules) + "\n}"
             lines.append(f"errorTensor = SparseArray[{tr_wl}, {{{n},{n},{total_t}}}];")

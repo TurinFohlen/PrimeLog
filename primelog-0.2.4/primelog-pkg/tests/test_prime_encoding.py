@@ -222,4 +222,10 @@ class TestExceptionToError(unittest.TestCase):
 
     def test_result_is_valid_prime_map_key(self):
         """映射结果必须是 prime_map 中的合法键"""
-        for exc in [TimeoutError(), PermissionError(), FileNotFoundError
+        for exc in [TimeoutError(), PermissionError(), FileNotFoundError(), ConnectionError(), RuntimeError()]:
+            result = self.el.exception_to_error(exc)
+            self.assertIn(result, self.el.prime_map)
+
+
+if __name__ == "__main__":
+    unittest.main()

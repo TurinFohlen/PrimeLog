@@ -197,6 +197,7 @@ class Registry:
     (re.compile(r'^is_'), 'internal.sync'),
     (re.compile(r'^has_'), 'internal.sync'),
 ]
+
     @classmethod
     def _infer_relation_type(cls, source: str,
                              comp_name: str, comp_short: str,

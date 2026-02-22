@@ -4,6 +4,7 @@
 import json
 import glob
 import os
+from primelog.tools.common import get_composite
 from collections import Counter
 
 
@@ -54,7 +55,9 @@ def run(log_dir: str = None, log_file: str = None, top: int = 10) -> None:
     caller_errors = Counter()
     callee_errors = Counter()
 
-    for _, caller, callee, composite, _ in events:
+    for event in events:
+        caller, callee = event[1], event[2]
+        composite = get_composite(event)
         if composite == 1:
             continue
         errors = decode(composite, rev_map)

@@ -4,6 +4,7 @@
 import json
 import glob
 import os
+from primelog.tools.common import get_composite
 
 
 def find_latest(log_dir: str, pattern: str):
@@ -52,7 +53,9 @@ def run(log_dir: str = None, log_file: str = None, adj_file: str = None) -> None
 
     error_count = 0
     print(f"\n错误事件详情  ({lf})\n{'─'*70}")
-    for i, (t, caller, callee, composite, _) in enumerate(events):
+    for i, event in enumerate(events):
+        t, caller, callee = event[0], event[1], event[2]
+        composite = get_composite(event)
         if composite == 1:
             continue
         error_count += 1

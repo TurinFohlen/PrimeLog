@@ -19,6 +19,7 @@ import argparse
 import math
 from collections import Counter
 from datetime import datetime
+from primelog.tools.common import get_composite
 
 
 _DEFAULT_LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
@@ -156,8 +157,8 @@ def main():
     # 统计错误类型出现次数
     error_counter = Counter()
     for event in events:
-        # 事件格式：[t, caller, callee, composite, log_value]
-        composite = event[3]
+        # 事件格式：[t, caller, callee, log_value]（v2.0）或旧版 composite（v1.x）
+        composite = get_composite(event)
         error_list = decode_errors(composite, prime_map)
         for err in error_list:
             if err != "none":  # 忽略无错误事件
@@ -189,7 +190,8 @@ def run(log_file: str = "", log_dir: str = "", top: int = 15,
         data = json.load(f)
     error_counter = Counter()
     for event in data.get("events", []):
-        for err in decode_errors(event[3], data.get("prime_map", {})):
+        composite = get_composite(event)
+        for err in decode_errors(composite, data.get("prime_map", {})):
             if err != "none":
                 error_counter[err] += 1
     print_error_histogram(error_counter, top_n=top, width=width, log_scale=log_scale)

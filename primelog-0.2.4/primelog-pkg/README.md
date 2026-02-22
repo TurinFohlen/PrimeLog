@@ -247,10 +247,48 @@ SingularValueDecomposition[errorTensor]
 
 ---
 
+## 存储策略（v0.2.4）
+
+导出的事件日志**只存储错误列表（明文）和对数值**，不存储大整数乘积。
+
+```json
+{
+  "t": 0,
+  "timestamp": "2026-02-22T10:37:53.123456",
+  "caller": 0,
+  "callee": 1,
+  "errors": ["timeout", "file_not_found"],
+  "log_value": 2.302585092994046
+}
+```
+
+对数值足以精确表示原始乘积，可通过 `round(exp(log_value))` 还原整数，再进行素数因数分解：
+
+```python
+from primelog.core.error_log import log_to_composite, decode_from_log
+
+composite = log_to_composite(2.302585)   # → 10  (= 2 × 5)
+errors    = decode_from_log(2.302585)    # → ["timeout", "file_not_found"]
+```
+
+Wolfram Language 中同样适用：
+
+```mathematica
+composite = Round[Exp[logValue]];   (* 还原整数乘积 *)
+(* 再对 composite 做素数因数分解即可恢复错误集合 *)
+```
+
+这既避免了大整数溢出，又保留了所有数学性质（唯一分解定理）。
+
+---
+
 ## 版本历史
 
 | 版本 | 主要内容 |
 |------|----------|
+| v0.2.2 | 自观测（Orchestrator 自身被追踪）；多项目并发隔离（threading.local 路由） |
+| v0.2.3 | 函数名推断关系类型（28条规则）；constants.py 按调用频率重排素数；test_prime_encoding.py 单元测试 |
+| v0.2.4 | 存储策略升级：只存 errors + log_value，移除 composite_value；新增 log_to_composite / decode_from_log 工具函数 |
 | v0.2.0 | Orchestrator 统一调度中心；全工具集成（histogram/timeline/convert/fft-prep）；自观测；多项目事件状态隔离 |
 | v0.1.3 | loadmark 命令；register 自动打印章；多项目命名空间 |
 | v0.1.0 | 核心三件套；CLI 基础命令；pip 可安装包 |

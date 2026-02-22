@@ -4,6 +4,7 @@
 import json
 import glob
 import os
+from primelog.tools.common import get_composite
 
 
 def find_latest(log_dir: str, pattern: str):
@@ -35,12 +36,14 @@ def run(log_dir: str = None, log_file: str = None, adj_file: str = None) -> None
     rev_map    = {v: k for k, v in log['prime_map'].items()}
     timestamps = log.get('timestamps', [])
 
-    exec_errors = [(i, e) for i, e in enumerate(events) if e[3] != 1]
+    exec_errors = [(i, e) for i, e in enumerate(events) if get_composite(e) != 1]
 
     print(f"\n执行期错误事件  ({lf})\n{'─'*70}")
     if not exec_errors:
         print("  ✅ 无执行期错误")
-    for i, (t, caller, callee, composite, _) in exec_errors:
+    for i, e in exec_errors:
+        t, caller, callee = e[0], e[1], e[2]
+        composite = get_composite(e)
         remaining = composite
         errors = []
         for p, name in rev_map.items():

@@ -52,7 +52,8 @@ def cmd_convert(a):
     _o().convert(project=a.project or "", log_dir=a.log_dir or "",
                  log_file=a.file or "", fmt=a.format, output=a.output or "",
                  index=a.index, start=a.start or "", end=a.end or "",
-                 error_types=a.error_types or "", component=a.component or "")
+                 error_types=a.error_types or "", component=a.component or "",
+                 raw=getattr(a, 'raw', False))   # 新增 raw 参数
 
 def cmd_fft_prep(a):
     _o().fft_prep(project=a.project or "", log_dir=a.log_dir or "",
@@ -108,7 +109,7 @@ def main():
   primelog stats        --project my-proj
   primelog histogram    --project my-proj --top 20
   primelog timeline     --project my-proj --mode heatmap
-  primelog convert      --project my-proj --format csv --output out.csv
+  primelog convert      --project my-proj --format csv --output out.csv [--raw]
   primelog fft-prep     --project my-proj --mode count
   primelog archive      --project my-proj --keep 30
   primelog export       --project my-proj --out ./logs
@@ -175,6 +176,8 @@ def main():
     p.add_argument('--end',          default=None)
     p.add_argument('--error-types',  default=None)
     p.add_argument('--component',    default=None)
+    # 新增 raw 选项
+    p.add_argument('--raw', action='store_true', help='不解码错误，直接输出原始 log_value（适合数学分析）')
 
     # ── fft-prep ──────────────────────────────────────────────
     p = S.add_parser('fft-prep', help='为 FFT 频域分析准备时间序列数据')
