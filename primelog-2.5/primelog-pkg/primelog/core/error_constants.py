@@ -11,6 +11,15 @@ prime_map = {
     "auth_failed":      13,
     "unknown":          17,
     "execution_error":  19,
+    # HTTP 状态码相关错误（虚拟外部组件 / call_external 使用）
+    "http_400":         23,   # Bad Request
+    "http_401":         29,   # Unauthorized
+    "http_403":         31,   # Forbidden
+    "http_404":         37,   # Not Found
+    "http_500":         41,   # Internal Server Error
+    "http_502":         43,   # Bad Gateway
+    "http_503":         47,   # Service Unavailable
+    "http_504":         53,   # Gateway Timeout
 }
 
-_next_prime_candidates = [23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83]
+_next_prime_candidates = [59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113]

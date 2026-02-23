@@ -22,6 +22,7 @@ class ComponentSpec:
     registration_order: int = 0
     source_file: str = ""
     class_name: str = ""
+    metadata: dict = field(default_factory=dict)  # 虚拟外部组件配置（call_external 使用）
 
 
 class Registry:
@@ -395,16 +396,20 @@ class Registry:
 
     def register(self, name: str, type_: str, signature: str):
         def decorator(func_or_class):
-            func_or_class.__registry_name__ = name
+            # 虚拟外部组件：func_or_class 为 None 时跳过 inspect
+            is_virtual = func_or_class is None
+
+            if not is_virtual:
+                func_or_class.__registry_name__ = name
 
             try:
-                source_file = inspect.getsourcefile(func_or_class) or ""
+                source_file = (inspect.getsourcefile(func_or_class) or "") if not is_virtual else ""
                 source_file = os.path.relpath(source_file) if source_file else ""
-            except:
+            except Exception:
                 source_file = ""
 
             class_name = ""
-            if inspect.isclass(func_or_class):
+            if not is_virtual and inspect.isclass(func_or_class):
                 class_name = func_or_class.__name__
 
             if name in self.components:
@@ -425,15 +430,14 @@ class Registry:
                 self.registration_counter += 1
                 self.components[name] = spec
 
-            # 使用新的依赖分析，同时填充 typed_dependencies 和 dependencies
-            typed_deps = self._analyze_dependencies(func_or_class)
-            spec.typed_dependencies = typed_deps
-            spec.dependencies = [dep for dep, _ in typed_deps]  # 向后兼容
-
-            self.component_instances[name] = func_or_class
+            if not is_virtual:
+                # 使用新的依赖分析，同时填充 typed_dependencies 和 dependencies
+                typed_deps = self._analyze_dependencies(func_or_class)
+                spec.typed_dependencies = typed_deps
+                spec.dependencies = [dep for dep, _ in typed_deps]  # 向后兼容
+                self.component_instances[name] = func_or_class
 
             self._flush()
-
             return func_or_class
         return decorator
 
@@ -500,7 +504,20 @@ class Registry:
             try:
                 from primelog.core.error_log import record_event, exception_to_error
                 error_set = [exception_to_error(exc)]
-                record_event(caller, name, error_set, self.components)
+                # caller 为 None 时（顶层调用），用项目根节点作为虚拟调用者
+                effective_caller = caller
+                if effective_caller is None:
+                    # 取组件名的第一段（项目名）作为虚拟根节点，确保事件能被记录
+                    proj = name.split('.')[0] if '.' in name else name
+                    root = f"{proj}.__root__"
+                    if root not in self.components:
+                        from primelog.core.registry import ComponentSpec
+                        self.components[root] = ComponentSpec(
+                            name=root, type='root', signature='',
+                            registration_order=-1,
+                        )
+                    effective_caller = root
+                record_event(effective_caller, name, error_set, self.components)
             except Exception:
                 pass
             raise

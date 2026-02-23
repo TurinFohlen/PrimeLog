@@ -24,7 +24,7 @@ import threading
 import atexit
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import reduce
 import operator
 from typing import Dict, List, Optional, Tuple, Any
@@ -44,10 +44,19 @@ prime_map: Dict[str, int] = {
     "auth_failed":      13,
     "unknown":          17,  # 未识别异常的默认映射
     "execution_error":  19,  # 命令执行失败(非零返回码)
+    # HTTP 状态码错误（虚拟外部组件 / call_external 使用）
+    "http_400":         23,  # Bad Request
+    "http_401":         29,  # Unauthorized
+    "http_403":         31,  # Forbidden
+    "http_404":         37,  # Not Found
+    "http_500":         41,  # Internal Server Error
+    "http_502":         43,  # Bad Gateway
+    "http_503":         47,  # Service Unavailable
+    "http_504":         53,  # Gateway Timeout
 }
 
 # 用于扩展 prime_map 时自动分配下一个可用素数
-_next_prime_candidates = [23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83]
+_next_prime_candidates = [59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113]
 
 
 def register_error_type(error_name: str) -> int:
@@ -87,10 +96,15 @@ def exception_to_error(exc: Exception) -> str:
     """
     将异常实例映射为错误类型字符串.
     优先精确匹配, 再做 MRO 遍历, 最后返回 "unknown".
+    也检查异常消息，支持 call_external 抛出的 Exception("http_404") 等.
     """
     for exc_type, error_name in _exception_map.items():
         if isinstance(exc, exc_type):
             return error_name
+    # 检查异常消息是否直接是一个已知错误键（call_external 使用此约定）
+    msg = str(exc).strip()
+    if msg in prime_map and msg not in ("none", "unknown"):
+        return msg
     # 尝试用异常类名推导(例如 AuthError -> "auth_failed" 如果存在)
     class_name = type(exc).__name__.lower()
     for key in prime_map:
@@ -289,7 +303,7 @@ def record_event(
             if err not in prime_map:
                 register_error_type(err)
 
-        timestamp = datetime.now().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
         store = _get_project_store()
 
         if store is not None:
@@ -330,7 +344,7 @@ def _get_adjacency_list(registry_instance) -> Dict[str, Any]:
 
 def export_adjacency_json(registry_instance, filepath: Optional[str] = None) -> str:
     """【独立文件①】仅导出静态依赖矩阵 A 到 JSON(带权)."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     if filepath is None:
         filepath = os.path.join((_get_project_store() or {}).get("export_dir", export_dir), f"adjacency_matrix_{timestamp}.json")
 
@@ -373,7 +387,7 @@ def export_events_json(filepath: Optional[str] = None) -> str:
     """
     【独立文件②】导出错误事件列表(v3.0, 时间戳为相对秒数).
     """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     store = _get_project_store()
     _ev  = store['events']       if store else _events
     _tev = store['timed_events'] if store else _timed_events
@@ -425,7 +439,7 @@ def export_events_json(filepath: Optional[str] = None) -> str:
 
 def export_adjacency_wl(registry_instance, filepath: Optional[str] = None) -> str:
     """【独立文件③】仅导出静态依赖矩阵 A 到 Wolfram Language (.wl)(带权)."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     if filepath is None:
         filepath = os.path.join((_get_project_store() or {}).get("export_dir", export_dir), f"adjacency_matrix_{timestamp}.wl")
 
@@ -489,7 +503,7 @@ def export_events_wl(registry_instance, filepath: Optional[str] = None, include_
         filepath: 输出文件路径(若为 None 则自动生成)
         include_errors: 若为 True, events 中包含明文错误列表; 否则只包含 log_value (紧凑版)
     """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     store_w  = _get_project_store()
     _ev_w    = store_w['events']       if store_w else _events
     _tev_w   = store_w['timed_events'] if store_w else _timed_events
