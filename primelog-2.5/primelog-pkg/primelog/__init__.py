@@ -30,7 +30,7 @@ from primelog.core.error_log import (
 )
 from primelog.core.orchestrator import PrimeLogOrchestrator, _default_orchestrator as _orch
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __author__  = "RoseHammer"
 __license__ = "MPL-2.0"
 

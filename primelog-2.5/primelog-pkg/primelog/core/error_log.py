@@ -159,15 +159,37 @@ _thread_local  = threading.local()         # .project_key (线程私有)
 _store_lock    = threading.Lock()          # 保护 _project_store 结构修改
 
 # fallback (无项目模式, 向后兼容)
+# ─────────────────────────────────────────────
+# 4. 全局事件存储（多项目线程安全）
+# ─────────────────────────────────────────────
+# 架构说明：
+#   _project_store[key] = {
+#       'events':        List[Tuple],   # (t, caller_idx, callee_idx, error_set)
+#       'timed_events':  List[Tuple],   # (timestamp, caller_idx, callee_idx, error_set)
+#       'export_dir':    str,
+#       'event_counter': int,
+#   }
+#   _thread_local.project_key 存储当前线程绑定的项目 key（线程私有）
+#   record_event / export_* 通过 _get_project_store() 路由到对应项目
+#
+# 向后兼容：
+#   _events / _timed_events / export_dir / _event_counter 仍作为
+#   "无项目"模式的 fallback，行为与旧版完全一致。
+
+_project_store: Dict[str, dict] = {}       # project_key → 项目状态
+_thread_local  = threading.local()         # .project_key（线程私有）
+_store_lock    = threading.Lock()          # 保护 _project_store 结构修改
+
+# fallback（无项目模式，向后兼容）
 _events: List[Tuple[int, int, int, List[str]]] = []
 _timed_events: List[Tuple[str, int, int, List[str]]] = []
 _event_counter = 0
 _lock = threading.Lock()
 
-# 是否启用日志(可动态切换)
+# 是否启用日志（可动态切换）
 enabled: bool = True
 
-# 导出目录(默认为当前目录, 无项目模式使用)
+# 导出目录（默认为当前目录，无项目模式使用）
 export_dir: str = "."
 
 
@@ -247,8 +269,8 @@ def record_event(
     components: Dict
 ) -> None:
     """
-    记录一次组件调用事件.
-    自动路由到当前线程绑定项目的 store; 无绑定时写 fallback 全局列表.
+    记录一次组件调用事件。
+    自动路由到当前线程绑定项目的 store；无绑定时写 fallback 全局列表。
     """
     global _event_counter
 

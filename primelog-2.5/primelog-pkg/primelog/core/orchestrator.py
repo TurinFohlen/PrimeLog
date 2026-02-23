@@ -257,7 +257,7 @@ class PrimeLogOrchestrator:
     def convert(self, project: str = "", log_dir: str = "",
                 log_file: str = "", fmt: str = "csv", output: str = "",
                 index: str = "primelog", start: str = "", end: str = "",
-                error_types: str = "", component: str = "", raw: bool = False) -> None:
+                error_types: str = "", component: str = "") -> None:
         from primelog.tools.exporter import run as _run
         with self._ctx():
             d  = self._resolve_log_dir(project, log_dir)
@@ -265,7 +265,7 @@ class PrimeLogOrchestrator:
             if not lf:
                 print(f"❌ 在 {d} 下未找到 error_events_*.json"); return
         _run(lf, fmt=fmt, output=output, index=index, start=start,
-             end=end, error_types=error_types, component=component, raw=raw)
+             end=end, error_types=error_types, component=component)
 
     def fft_prep(self, project: str = "", log_dir: str = "",
                  log_file: str = "", mode: str = "interval",

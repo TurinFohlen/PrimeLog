@@ -1,0 +1,3 @@
+include README.md LICENSE pyproject.toml
+recursive-include demo *.py *.json
+recursive-include contrib *.wl *.md

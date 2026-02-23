@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "primelog"
-version = "0.2.4"
+version = "0.3.0"
 description = "Decompose Anything. Understand Everything. — 基于素数唯一分解定理的通用组件日志与可观测性框架"
 readme = "README.md"
 license = { text = "MPL-2.0" }

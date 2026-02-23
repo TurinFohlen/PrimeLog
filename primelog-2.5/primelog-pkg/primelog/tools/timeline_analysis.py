@@ -22,7 +22,15 @@ def main():
     rev_map = {v:k for k,v in prime_map.items()}
     
     # 将时间戳解析为 datetime 对象
-    dt_list = [datetime.fromisoformat(ts) for ts in timestamps]
+    start_ts_str = data.get('metadata', {}).get('start_timestamp', '')
+    if timestamps and isinstance(timestamps[0], float) and start_ts_str:
+        from datetime import timedelta
+        start_dt = datetime.fromisoformat(start_ts_str)
+        dt_list = [start_dt + timedelta(seconds=t) for t in timestamps]
+    elif timestamps and isinstance(timestamps[0], str):
+        dt_list = [datetime.fromisoformat(ts) for ts in timestamps]
+    else:
+        dt_list = []
     
     # 按分钟统计事件数量
     minute_counts = Counter()
@@ -48,7 +56,15 @@ def run(log_file: str) -> None:
     events = data['events']
     prime_map = data['prime_map']
     rev_map = {v: k for k, v in prime_map.items()}
-    dt_list = [datetime.fromisoformat(ts) for ts in timestamps]
+    start_ts_str = data.get('metadata', {}).get('start_timestamp', '')
+    if timestamps and isinstance(timestamps[0], float) and start_ts_str:
+        from datetime import timedelta
+        start_dt = datetime.fromisoformat(start_ts_str)
+        dt_list = [start_dt + timedelta(seconds=t) for t in timestamps]
+    elif timestamps and isinstance(timestamps[0], str):
+        dt_list = [datetime.fromisoformat(ts) for ts in timestamps]
+    else:
+        dt_list = []
     minute_counts = Counter()
     for dt in dt_list:
         minute_counts[dt.strftime("%Y-%m-%d %H:%M")] += 1
