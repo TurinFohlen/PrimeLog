@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """
-primelog CLI v0.2.0 — 纯参数解析层
+primelog CLI v0.3.0 — 纯参数解析层
 
-职责：解析用户命令 → 委托给 PrimeLogOrchestrator 执行。
-所有逻辑在 Orchestrator，这里只负责"听用户说什么"。
+职责：解析用户命令 → 委托给 PrimeLogOrchestrator / 工具模块 执行。
+所有逻辑在 Orchestrator 和 tools/，这里只负责"听用户说什么"。
+
+v0.3 新增
+─────────
+  schema define/record/export/list/save/load  — 要素表 Schema API
+  aggregate                                   — 多节点日志合并
 """
 
 import sys, os, glob, argparse
@@ -14,8 +19,13 @@ def _o():
     return _default_orchestrator
 
 
+def _sr():
+    from primelog.core.schema_registry import _schema_registry
+    return _schema_registry
+
+
 # ─────────────────────────────────────────────────────────────
-# 命令处理函数
+#  原有命令（保持不变）
 # ─────────────────────────────────────────────────────────────
 
 def cmd_scan(a):
@@ -87,32 +97,191 @@ def cmd_register(a):
                   project=a.project or "", signature=a.signature or "")
 
 def cmd_version(a):
-    import primelog; print(f"primelog {primelog.__version__}")
+    import primelog
+    print(f"primelog {primelog.__version__}")
 
 
 # ─────────────────────────────────────────────────────────────
-# 参数定义
+#  v0.3：schema 命令组
+# ─────────────────────────────────────────────────────────────
+
+def cmd_schema_define(a):
+    import json
+    states = {}
+    if a.states:
+        try:
+            states = json.loads(a.states)
+        except json.JSONDecodeError:
+            try:
+                for part in a.states.split(","):
+                    k, v = part.strip().split("=")
+                    states[k.strip()] = int(v.strip())
+            except Exception:
+                print("❌ --states 格式错误")
+                print("   JSON: '{\"low\":2,\"high\":5}'")
+                print("   键值: low=2,high=5")
+                sys.exit(1)
+    dims   = [d.strip() for d in a.dims.split(",")] if a.dims else []
+    schema = _sr().define(name=a.name, states=states or None,
+                          dimensions=dims, description=a.desc or "")
+    print(f"✅ Schema '{a.name}' 注册")
+    print(f"   states: {schema.states}")
+    if dims:   print(f"   dims:   {dims}")
+    if a.desc: print(f"   desc:   {a.desc}")
+
+
+def cmd_schema_record(a):
+    states_list = [s.strip() for s in a.states.split(",")]
+    _sr().record_state(
+        schema_name = a.schema,
+        subject     = a.subject,
+        states      = states_list,
+        observer    = a.observer or "",
+        project     = a.project or "__global__",
+        export_dir  = a.out or ".",
+    )
+    print(f"✅ 记录  schema={a.schema}  subject={a.subject}  states={states_list}")
+
+
+def cmd_schema_export(a):
+    proj = a.project or "__global__"
+    if a.schema == "__all__":
+        paths = _sr().export_all_schemas(project=proj, output_dir=a.out or ".")
+        if not paths:
+            print("⚠️  无可导出的 Schema 事件")
+        else:
+            for p in paths: print(f"✅ {p}")
+    else:
+        path = _sr().export_schema(a.schema, project=proj,
+                                   filepath=a.file or None)
+        print(f"✅ {path}" if path else f"⚠️  Schema '{a.schema}' 没有事件记录")
+
+
+def cmd_schema_list(a):
+    schemas = _sr().list_schemas()
+    if not schemas:
+        print("（尚未注册任何 Schema）"); return
+    for name in schemas:
+        s = _sr().get(name)
+        states_str = "  ".join(
+            f"{k}={v}" for k, v in sorted(s.states.items(), key=lambda x: x[1]))
+        print(f"  {name}")
+        if s.description: print(f"    {s.description}")
+        if s.dimensions:  print(f"    维度: {', '.join(s.dimensions)}")
+        print(f"    状态: {states_str}")
+
+
+def cmd_schema_save(a):
+    _sr().save_schema_file(a.schema, a.file)
+    print(f"✅ Schema '{a.schema}' → {a.file}")
+
+
+def cmd_schema_load(a):
+    schema = _sr().load_schema_file(a.file)
+    print(f"✅ 加载 Schema '{schema.name}'（{len(schema.states)} 个状态）")
+
+
+# ─────────────────────────────────────────────────────────────
+#  v0.3：aggregate 命令
+# ─────────────────────────────────────────────────────────────
+
+def cmd_aggregate(a):
+    from primelog.tools.aggregate import (
+        discover_nodes, NodeData, aggregate, write_output
+    )
+    from pathlib import Path
+
+    raw_nodes = []
+
+    if a.dir:
+        root = Path(a.dir)
+        if not root.is_dir():
+            print(f"❌ 不是目录: {root}"); sys.exit(1)
+        discovered = discover_nodes(root)
+        if not discovered:
+            print(f"❌ 在 {root} 中未找到日志文件对"); sys.exit(1)
+        if len(discovered) == 1 and a.node_ip:
+            discovered[0] = (a.node_ip, discovered[0][1], discovered[0][2])
+        raw_nodes.extend(discovered)
+
+    if a.node:
+        for node_id, ev_str, adj_str in a.node:
+            ev_p, adj_p = Path(ev_str), Path(adj_str)
+            if not ev_p.exists(): print(f"❌ 找不到: {ev_p}"); sys.exit(1)
+            if not adj_p.exists(): print(f"❌ 找不到: {adj_p}"); sys.exit(1)
+            raw_nodes.append((node_id, ev_p, adj_p))
+
+    if not raw_nodes:
+        print("❌ 请指定 --dir 或至少一个 --node"); sys.exit(1)
+
+    print(f"[aggregate] {len(raw_nodes)} 个节点：")
+    for nid, ep, ap in raw_nodes:
+        print(f"  [{nid}]  {ep.name}  +  {ap.name}")
+
+    if a.dry_run:
+        print("[aggregate] --dry-run，退出"); return
+
+    node_data = []
+    for nid, ep, ap in raw_nodes:
+        try:
+            nd = NodeData(nid, ep, ap)
+            node_data.append(nd)
+            print(f"  [{nid}] {len(nd.events)} 事件  {len(nd.nodes)} 组件")
+        except Exception as e:
+            print(f"❌ 加载 {nid} 失败: {e}"); sys.exit(1)
+
+    ev_g, adj_g = aggregate(node_data, global_name=a.global_name)
+    ev_path, adj_path = write_output(ev_g, adj_g, Path(a.out or "."), a.global_name)
+
+    print(f"✅ {adj_g['metadata']['n_components']} 组件  "
+          f"{ev_g['metadata']['n_events']} 事件")
+    print(f"   {ev_path}")
+    print(f"   {adj_path}")
+
+
+# ─────────────────────────────────────────────────────────────
+#  参数定义
 # ─────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
         prog='primelog',
-        description='PrimeLog v0.2.0 — Decompose Anything. Understand Everything.',
+        description='PrimeLog v0.3.0 — Decompose Anything. Understand Everything.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-命令速查:
+        epilog="""\
+命令速查
+──────────────────────────────────────────────────────────
+  # 组件注册
   primelog register  *.py --type service --project my-proj
   primelog loadmark  -r ./my_project
   primelog scan      ./my_project
-  primelog show-errors  --project my-proj
-  primelog stats        --project my-proj
-  primelog histogram    --project my-proj --top 20
-  primelog timeline     --project my-proj --mode heatmap
-  primelog convert      --project my-proj --format csv --output out.csv
-  primelog fft-prep     --project my-proj --mode count
-  primelog archive      --project my-proj --keep 30
-  primelog export       --project my-proj --out ./logs
-        """
+
+  # 错误日志分析
+  primelog show-errors       --project my-proj
+  primelog stats             --project my-proj
+  primelog histogram         --project my-proj --top 20
+  primelog timeline          --project my-proj --mode heatmap
+  primelog timeline-analysis --project my-proj
+  primelog convert           --project my-proj --format csv -o out.csv
+  primelog fft-prep          --project my-proj --mode count
+  primelog export            --project my-proj --out ./logs
+  primelog archive           --project my-proj --keep 30
+
+  # 要素表 Schema（v0.3 新增）
+  primelog schema define  cpu_load --states '{"low":2,"high":5}' --dims server_id
+  primelog schema record  cpu_load --subject web-01 --states high
+  primelog schema export  cpu_load --project my-proj
+  primelog schema export  __all__  --project my-proj --out ./logs
+  primelog schema list
+  primelog schema save    cpu_load schemas/cpu_load.json
+  primelog schema load    schemas/cpu_load.json
+
+  # 多节点聚合（v0.3 新增）
+  primelog aggregate --dir /mnt/incoming --global-name nightly -o ./global
+  primelog aggregate \\
+      --node 10.0.0.1 ev1.json adj1.json \\
+      --node 10.0.0.2 ev2.json adj2.json -o ./global
+"""
     )
     S = parser.add_subparsers(dest='command')
 
@@ -135,22 +304,21 @@ def main():
 
     # ── histogram ─────────────────────────────────────────────
     p = S.add_parser('histogram', help='ASCII 错误频率直方图')
-    p.add_argument('file', nargs='?', help='error_events_*.json（默认最新）')
-    p.add_argument('--project', default=None)
-    p.add_argument('--log-dir', default=None)
-    p.add_argument('--top',   '-t', type=int, default=15, help='显示前 N 种错误')
-    p.add_argument('--width', '-w', type=int, default=60, help='直方图宽度')
-    p.add_argument('--log',   action='store_true',        help='对数归一化')
-
-    # ── timeline ──────────────────────────────────────────────
-    p = S.add_parser('timeline', help='ASCII 时间线可视化（热力图/冲击波/多类型）')
     p.add_argument('file', nargs='?')
     p.add_argument('--project', default=None)
     p.add_argument('--log-dir', default=None)
-    p.add_argument('--mode', '-m', choices=['heatmap','wave','timeline','all'],
-                   default='all')
-    p.add_argument('--interval', '-i', default='1m',
-                   help='时间粒度，如 30s / 5m / 1h（默认 1m）')
+    p.add_argument('--top',   '-t', type=int, default=15)
+    p.add_argument('--width', '-w', type=int, default=60)
+    p.add_argument('--log', action='store_true', help='对数归一化')
+
+    # ── timeline ──────────────────────────────────────────────
+    p = S.add_parser('timeline', help='ASCII 时间线可视化')
+    p.add_argument('file', nargs='?')
+    p.add_argument('--project', default=None)
+    p.add_argument('--log-dir', default=None)
+    p.add_argument('--mode', '-m',
+                   choices=['heatmap','wave','timeline','all'], default='all')
+    p.add_argument('--interval', '-i', default='1m')
     p.add_argument('--width',  '-w', type=int, default=80)
     p.add_argument('--height', type=int, default=20)
     p.add_argument('--top',    '-t', type=int, default=5)
@@ -158,26 +326,27 @@ def main():
     p.add_argument('--anomaly-threshold', type=float, default=3.0)
 
     # ── timeline-analysis ─────────────────────────────────────
-    p = S.add_parser('timeline-analysis', help='按分钟统计事件数（轻量分析）')
+    p = S.add_parser('timeline-analysis', help='按分钟统计事件数')
     p.add_argument('file', nargs='?')
     p.add_argument('--project', default=None)
     p.add_argument('--log-dir', default=None)
 
     # ── convert ───────────────────────────────────────────────
-    p = S.add_parser('convert', help='将日志导出为 CSV / JSONL / Elasticsearch 格式')
-    p.add_argument('file', nargs='?', help='error_events_*.json（默认最新）')
-    p.add_argument('--project',     default=None)
-    p.add_argument('--log-dir',     default=None)
-    p.add_argument('--format', '-f', choices=['csv','jsonl','elastic'], default='csv')
+    p = S.add_parser('convert', help='导出为 CSV / JSONL / Elasticsearch 格式')
+    p.add_argument('file', nargs='?')
+    p.add_argument('--project',    default=None)
+    p.add_argument('--log-dir',    default=None)
+    p.add_argument('--format', '-f',
+                   choices=['csv','jsonl','elastic'], default='csv')
     p.add_argument('--output', '-o', default=None)
-    p.add_argument('--index',        default='primelog')
-    p.add_argument('--start',        default=None)
-    p.add_argument('--end',          default=None)
-    p.add_argument('--error-types',  default=None)
-    p.add_argument('--component',    default=None)
+    p.add_argument('--index',       default='primelog')
+    p.add_argument('--start',       default=None)
+    p.add_argument('--end',         default=None)
+    p.add_argument('--error-types', default=None)
+    p.add_argument('--component',   default=None)
 
     # ── fft-prep ──────────────────────────────────────────────
-    p = S.add_parser('fft-prep', help='为 FFT 频域分析准备时间序列数据')
+    p = S.add_parser('fft-prep', help='为 FFT 频域分析准备时间序列')
     p.add_argument('file', nargs='?')
     p.add_argument('--project',  default=None)
     p.add_argument('--log-dir',  default=None)
@@ -212,8 +381,53 @@ def main():
     p.add_argument('--signature', default='')
 
     # ── version ───────────────────────────────────────────────
-    S.add_parser('version', help='显示版本')
+    S.add_parser('version', help='显示版本号')
 
+    # ── schema（v0.3）─────────────────────────────────────────
+    ps = S.add_parser('schema', help='要素表 Schema 管理（v0.3）')
+    SS = ps.add_subparsers(dest='schema_cmd')
+
+    p = SS.add_parser('define', help='注册一个要素表')
+    p.add_argument('name')
+    p.add_argument('--states', '-s', help='状态→素数，JSON 或 key=prime,...')
+    p.add_argument('--dims',         help='维度标签（逗号分隔）')
+    p.add_argument('--desc',         help='描述')
+
+    p = SS.add_parser('record', help='记录一次状态观测')
+    p.add_argument('schema')
+    p.add_argument('--subject',  '-s', required=True)
+    p.add_argument('--states',         required=True,
+                   help='状态（逗号分隔），如 high 或 high,degraded')
+    p.add_argument('--observer', '-b', default='')
+    p.add_argument('--project',        default='')
+    p.add_argument('--out',            default='.')
+
+    p = SS.add_parser('export', help='导出 Schema 事件（__all__ 导出全部）')
+    p.add_argument('schema')
+    p.add_argument('--project', default='')
+    p.add_argument('--file', '-f', default=None, help='输出文件路径')
+    p.add_argument('--out',        default='.', help='输出目录（__all__ 用）')
+
+    SS.add_parser('list', help='列出已注册的要素表')
+
+    p = SS.add_parser('save', help='保存 Schema 定义为 JSON')
+    p.add_argument('schema')
+    p.add_argument('file')
+
+    p = SS.add_parser('load', help='从 JSON 加载 Schema 定义')
+    p.add_argument('file')
+
+    # ── aggregate（v0.3）──────────────────────────────────────
+    p = S.add_parser('aggregate', help='合并多节点日志（v0.3）')
+    p.add_argument('--dir',         metavar='DIR')
+    p.add_argument('--node-ip',     metavar='IP')
+    p.add_argument('--node',        nargs=3, action='append',
+                   metavar=('ID','EVENTS','ADJ'))
+    p.add_argument('--global-name', default='global')
+    p.add_argument('--out', '-o',   default='.')
+    p.add_argument('--dry-run',     action='store_true')
+
+    # ─────────────────────────────────────────────────────────
     args = parser.parse_args()
 
     dispatch = {
@@ -230,9 +444,24 @@ def main():
         'loadmark':          cmd_loadmark,
         'register':          cmd_register,
         'version':           cmd_version,
+        'aggregate':         cmd_aggregate,
     }
 
-    if args.command in dispatch:
+    if args.command == 'schema':
+        schema_dispatch = {
+            'define': cmd_schema_define,
+            'record': cmd_schema_record,
+            'export': cmd_schema_export,
+            'list':   cmd_schema_list,
+            'save':   cmd_schema_save,
+            'load':   cmd_schema_load,
+        }
+        sub = getattr(args, 'schema_cmd', None)
+        if sub in schema_dispatch:
+            schema_dispatch[sub](args)
+        else:
+            ps.print_help()
+    elif args.command in dispatch:
         dispatch[args.command](args)
     else:
         parser.print_help()

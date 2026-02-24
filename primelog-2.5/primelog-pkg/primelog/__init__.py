@@ -30,7 +30,7 @@ from primelog.core.error_log import (
 )
 from primelog.core.orchestrator import PrimeLogOrchestrator, _default_orchestrator as _orch
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __author__  = "RoseHammer"
 __license__ = "MPL-2.0"
 
@@ -96,6 +96,118 @@ def fft_prep(project: str = "", log_dir: str = "", log_file: str = "",
 def archive(project: str = "", keep: int = 30, compressor: str = "tar") -> None:
     """归档旧日志。"""
     _orch.archive(project=project, keep=keep, compressor=compressor)
+
+
+# ── 要素表（Schema）API ───────────────────────────────────────
+from primelog.core.schema_registry import _schema_registry as _sr
+from primelog.core.schema_registry import Schema as Schema
+
+
+def define_schema(
+    name:        str,
+    states:      dict = None,
+    dimensions:  list = None,
+    description: str  = "",
+) -> "Schema":
+    """
+    注册一个要素表（Schema）。
+
+    Parameters
+    ----------
+    name        : Schema 全局唯一名称
+    states      : 状态 → 素数 映射，例如 {"low":2,"high":5}
+    dimensions  : 维度标签（文档用途），例如 ["server_id","time"]
+    description : 人类可读描述
+
+    Example
+    -------
+    primelog.define_schema(
+        name        = "server_load",
+        dimensions  = ["server_id", "time"],
+        states      = {"low":2, "medium":3, "high":5, "critical":7},
+        description = "Server CPU load level",
+    )
+    """
+    from pathlib import Path as _Path
+    proj   = _get_current_project()
+    schema = _sr.define(name=name, states=states,
+                        dimensions=dimensions, description=description)
+    if proj:
+        log_base = getattr(_orch, "_log_base", "./logs")
+        _sr.set_export_dir(proj, name, str(_Path(log_base) / proj))
+    return schema
+
+
+def record_state(
+    schema:   str,
+    subject:  str,
+    states:   list,
+    observer: str = "",
+) -> None:
+    """
+    记录一次状态观测事件。
+
+    Parameters
+    ----------
+    schema   : 要素表名称（必须已用 define_schema 注册）
+    subject  : 被观测对象的标识符（如 "web-server-01"、"order-42"）
+    states   : 当前同时成立的状态列表（如 ["high", "degraded"]）
+    observer : 观测者标识（可选）
+
+    Example
+    -------
+    primelog.record_state(
+        schema   = "server_load",
+        subject  = "web-server-01",
+        states   = ["high"],
+        observer = "monitor-agent",
+    )
+    """
+    from pathlib import Path as _Path
+    proj     = _get_current_project()
+    log_base = getattr(_orch, "_log_base", "./logs")
+    export_d = str(_Path(log_base) / proj) if proj else "."
+    _sr.record_state(
+        schema_name = schema,
+        subject     = subject,
+        states      = states,
+        observer    = observer,
+        project     = proj,
+        export_dir  = export_d,
+    )
+
+
+def export_schema(schema: str, filepath: str = None) -> str:
+    """导出指定 Schema 的事件文件，返回写入路径。"""
+    return _sr.export_schema(schema,
+                             project=_get_current_project(),
+                             filepath=filepath)
+
+
+def export_all_schemas(output_dir: str = "") -> list:
+    """导出当前项目所有 Schema 的事件文件，返回路径列表。"""
+    from pathlib import Path as _Path
+    proj = _get_current_project()
+    if not output_dir:
+        log_base   = getattr(_orch, "_log_base", "./logs")
+        output_dir = str(_Path(log_base) / proj) if proj else "."
+    return _sr.export_all_schemas(project=proj, output_dir=output_dir)
+
+
+def list_schemas() -> list:
+    """返回已注册的 Schema 名称列表。"""
+    return _sr.list_schemas()
+
+
+def load_schema_file(filepath: str) -> "Schema":
+    """从 JSON 文件加载 Schema 定义。"""
+    return _sr.load_schema_file(filepath)
+
+
+def save_schema_file(schema: str, filepath: str) -> None:
+    """将 Schema 定义保存到 JSON 文件（供共享/版本控制）。"""
+    _sr.save_schema_file(schema, filepath)
+
 
 
 # ── 外部 API 调用追踪（稻草人 / Scarecrow）────────────────────
@@ -301,4 +413,13 @@ __all__ = [
     # 外部 API 追踪
     "call_external",
     "register_external",
+    # 要素表 Schema API
+    "define_schema",
+    "record_state",
+    "export_schema",
+    "export_all_schemas",
+    "list_schemas",
+    "load_schema_file",
+    "save_schema_file",
+    "Schema",
 ]

@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════
+# primelog-ascii  —  PrimeLog 终端 ASCII 可视化
+#
+# 用法：
+#   primelog-ascii errors     [events.json]
+#   primelog-ascii timeseries [events.json] [bin_size_sec]
+#   primelog-ascii heatmap    [events.json] [adj.json]
+#   primelog-ascii fft        [events.json] [bin_size_sec]
+#   primelog-ascii all        [log_dir]
+#
+# 可选：末尾加 --lolcat 开启彩虹上色 🌈
+# ═══════════════════════════════════════════════════════════════
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WL_DIR="$SCRIPT_DIR/wl_bridge"
+PY_DIR="$SCRIPT_DIR/py_plots"
+
+# ── 依赖检查 ──────────────────────────────────────────────────
+need() {
+    command -v "$1" &>/dev/null || { echo "❌ 需要 $1，请先安装"; exit 1; }
+}
+need wolfram
+need python3
+
+USE_LOLCAT=false
+if [[ "${@: -1}" == "--lolcat" ]]; then
+    command -v lolcat &>/dev/null && USE_LOLCAT=true || echo "⚠️  lolcat 未安装，跳过上色"
+    set -- "${@:1:$(($#-1))}"   # 去掉最后一个参数
+fi
+
+pipe_out() {
+    if $USE_LOLCAT; then
+        lolcat
+    else
+        cat
+    fi
+}
+
+# ── 自动找最新文件 ────────────────────────────────────────────
+find_latest() {
+    local pattern="$1"
+    local dir="${2:-.}"
+    ls -t "$dir"/$pattern 2>/dev/null | head -1
+}
+
+# ── 子命令 ────────────────────────────────────────────────────
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+
+errors)
+    evfile="${1:-$(find_latest 'error_events_*.json')}"
+    [[ -f "$evfile" ]] || { echo "❌ 找不到 error_events_*.json"; exit 1; }
+    echo "📊 错误分布  ← $evfile"
+    wolfram -script "$WL_DIR/errors.wl" "$evfile" \
+      | python3 "$PY_DIR/errors.py" \
+      | pipe_out
+    ;;
+
+timeseries)
+    evfile="${1:-$(find_latest 'error_events_*.json')}"
+    binsize="${2:-1.0}"
+    [[ -f "$evfile" ]] || { echo "❌ 找不到 error_events_*.json"; exit 1; }
+    echo "📈 时间序列  ← $evfile  (bin=${binsize}s)"
+    wolfram -script "$WL_DIR/timeseries.wl" "$evfile" "$binsize" \
+      | python3 "$PY_DIR/timeseries.py" \
+      | pipe_out
+    ;;
+
+heatmap)
+    evfile="${1:-$(find_latest 'error_events_*.json')}"
+    adjfile="${2:-$(find_latest 'adjacency_matrix_*.json')}"
+    [[ -f "$evfile" && -f "$adjfile" ]] || { echo "❌ 找不到所需 JSON 文件"; exit 1; }
+    echo "🌡️  热力图  ← $evfile + $adjfile"
+    wolfram -script "$WL_DIR/heatmap.wl" "$evfile" "$adjfile" \
+      | python3 "$PY_DIR/heatmap.py" \
+      | pipe_out
+    ;;
+
+fft)
+    evfile="${1:-$(find_latest 'error_events_*.json')}"
+    binsize="${2:-0.5}"
+    [[ -f "$evfile" ]] || { echo "❌ 找不到 error_events_*.json"; exit 1; }
+    echo "🎵 FFT 频谱  ← $evfile  (bin=${binsize}s)"
+    wolfram -script "$WL_DIR/fft.wl" "$evfile" "$binsize" \
+      | python3 "$PY_DIR/fft.py" \
+      | pipe_out
+    ;;
+
+all)
+    dir="${1:-.}"
+    evfile="$(find_latest 'error_events_*.json' "$dir")"
+    adjfile="$(find_latest 'adjacency_matrix_*.json' "$dir")"
+    [[ -f "$evfile" ]] || { echo "❌ $dir 下找不到日志文件"; exit 1; }
+
+    for sub in errors timeseries fft; do
+        echo ""
+        "$BASH_SOURCE" "$sub" "$evfile" | pipe_out
+    done
+
+    if [[ -f "$adjfile" ]]; then
+        echo ""
+        "$BASH_SOURCE" heatmap "$evfile" "$adjfile" | pipe_out
+    fi
+    ;;
+
+help|--help|-h)
+    cat << 'HELP'
+primelog-ascii — PrimeLog 终端可视化
+
+  errors     [events.json]               错误类型分布柱状图
+  timeseries [events.json] [bin_sec]     错误随时间变化折线图
+  heatmap    [events.json] [adj.json]    组件间错误热力图
+  fft        [events.json] [bin_sec]     错误信号 FFT 频谱
+  all        [log_dir]                   依次运行全部图表
+
+加 --lolcat 开启彩虹上色 🌈（需要安装 lolcat）
+
+示例：
+  cd logs/my-project
+  primelog-ascii all .
+  primelog-ascii errors --lolcat
+  primelog-ascii timeseries error_events_20260223.json 2.0
+HELP
+    ;;
+
+*)
+    echo "未知命令: $cmd  (运行 primelog-ascii help 查看用法)"
+    exit 1
+    ;;
+esac

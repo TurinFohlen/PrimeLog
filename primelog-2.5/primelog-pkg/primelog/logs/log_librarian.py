@@ -21,6 +21,7 @@ import subprocess
 import time
 import signal
 import atexit
+from datetime import datetime, timezone
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -51,7 +52,8 @@ def parse_date_from_filename(filename):
         m = re.search(pat, base)
         if m:
             try:
-                return datetime.strptime(m.group(1), fmt)
+                dt = datetime.strptime(m.group(1), fmt)                
+                return dt.replace(tzinfo=timezone.utc)  # ← 加这一行
             except ValueError:
                 continue
     return None
@@ -129,7 +131,7 @@ def compress_tar(file_list, archive_path, dry_run=False):
 # ---------------------------- 核心处理函数 ----------------------------
 def run_once(args, log_dir, archive_dir, cutoff):
     """执行一次归档操作"""
-    print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 开始归档检查")
+    print(f"\n[{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}] 开始归档检查")
     old_files = get_files_by_date(log_dir, cutoff)
     if not old_files:
         print("✅ 没有需要归档的文件。")
@@ -162,6 +164,17 @@ def run_once(args, log_dir, archive_dir, cutoff):
             ok = compress_tar(file_list, archive_path, dry_run=False)
 
         if ok:
+            # 投递一份给 Postmare 🐴
+            if args.mailbag and not args.dry_run:
+                mailbag_dir = os.path.abspath(args.mailbag)
+                os.makedirs(mailbag_dir, exist_ok=True)
+                dest = os.path.join(mailbag_dir, os.path.basename(archive_path))
+                try:
+                    shutil.copy2(archive_path, dest)
+                    print(f"    📬 已投递 mailbag: {os.path.basename(dest)}")
+                except Exception as e:
+                    print(f"    ⚠️  投递 mailbag 失败: {e}")
+
             total_archived += len(file_list)
             for f, _ in file_list:
                 try:
@@ -190,6 +203,8 @@ def main():
     parser.add_argument("--before", help="归档指定日期之前的文件（格式：YYYY-MM-DD），优先级高于 --keep")
     parser.add_argument("--compressor", choices=['7z', 'tar'], default='7z',
                         help="压缩工具（默认：7z，需要安装 p7zip）")
+    parser.add_argument("--mailbag", default=None,
+                        help="Postmare mailbag 目录，归档完成后自动投递一份给小马🐴发走")
     parser.add_argument("--dry-run", action='store_true', help="仅预览，不实际执行")
     parser.add_argument("--force", action='store_true', help="跳过删除确认（已自动）")
 
@@ -221,12 +236,12 @@ def main():
     # ---------------------- 日期截止 ----------------------
     if args.before:
         try:
-            cutoff = datetime.strptime(args.before, "%Y-%m-%d")
+            cutoff = datetime.strptime(args.before, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         except ValueError:
             print("❌ 日期格式错误，应为 YYYY-MM-DD")
             sys.exit(1)
     else:
-        cutoff = datetime.now() - timedelta(days=args.keep)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=args.keep)
 
     # 如果指定了项目，只处理该项目的子目录
     if args.project:
